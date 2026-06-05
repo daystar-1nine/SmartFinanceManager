@@ -16,12 +16,25 @@ public class SignupFrame extends JFrame {
     private JTextField usernameField;
     private JPasswordField passwordField;
     private JPasswordField confirmPasswordField;
+    private JFrame parent; // Keep track of parent to restore it later
 
-    public SignupFrame() {
+    public SignupFrame(JFrame parent) {
+        this.parent = parent;
 
         setTitle("Smart Finance Manager - Signup");
         setSize(400, 300);
         setLocationRelativeTo(null);
+
+        // Restore parent LoginFrame if this signup window is closed
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosing(java.awt.event.WindowEvent e) {
+                if (parent != null) {
+                    parent.setVisible(true);
+                }
+            }
+        });
 
         // Main panel with spacing
         JPanel panel = new JPanel(new GridLayout(7, 1, 10, 10));
@@ -89,8 +102,12 @@ public class SignupFrame extends JFrame {
 
                 dispose();
 
-                // Redirect back to login
-                new LoginFrame();
+                // Redirect back to login by restoring parent
+                if (parent != null) {
+                    parent.setVisible(true);
+                } else {
+                    new LoginFrame();
+                }
 
             } else {
 

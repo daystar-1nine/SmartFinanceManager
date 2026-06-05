@@ -1,8 +1,20 @@
 package ui;
 
+import java.util.HashMap;
+import java.util.Map;
+
+
+//import org.jfree.chart.ChartFactory;
+//import org.jfree.chart.ChartPanel;
+//import org.jfree.chart.JFreeChart;
+//import org.jfree.data.general.DefaultPieDataset;
+
 import model.Transaction;
 import service.TransactionService;
 import service.ReportService;
+import service.BudgetService;
+import java.util.Map;
+import service.InsightService;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -22,6 +34,9 @@ import java.util.List;
  * ✔ Export TXT / CSV
  */
 public class TransactionPanel extends JPanel {
+
+    // ================= SERVICES =================
+    private InsightService insightService; // ✅ ADD THIS
 
     // ================= INPUT =================
     private JTextField amountField, noteField;
@@ -52,13 +67,25 @@ public class TransactionPanel extends JPanel {
     private Transaction lastDeletedTransaction;
     private int lastDeletedIndex;
 
+    // ================= NOTIFICATION =================
+    private JTextArea notificationArea;
+    private BudgetService budgetService;
+
+    // ================= InsightService =================
+    private JTextArea insightArea;
+    private PieChartPanel pieChartPanel; // 🔥 ADD THIS
+
     // ================= CONSTRUCTOR =================
     public TransactionPanel(String username) {
 
         this.username = username;
         this.transactionService = new TransactionService();
+        this.budgetService = new BudgetService();
+        this.insightService = new InsightService();
+        this.pieChartPanel = new PieChartPanel(); // 🔥 ADD THIS
 
         setLayout(new BorderLayout(10, 10));
+        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10)); // Add margins around panel
 
         add(createSummaryPanel(), BorderLayout.NORTH);
 
@@ -67,6 +94,16 @@ public class TransactionPanel extends JPanel {
         center.add(createTable(), BorderLayout.CENTER);
 
         add(center, BorderLayout.CENTER);
+
+        // ✅ ADD NOTIFICATION PANEL (RIGHT SIDE)
+        JPanel rightPanel = new JPanel(new GridLayout(3, 1, 10, 10)); // Changed rows from 2 to 3
+
+        rightPanel.setPreferredSize(new Dimension(260, 0));
+
+        rightPanel.add(createNotificationPanel()); // Top
+        rightPanel.add(createInsightPanel());// Middle
+        rightPanel.add(pieChartPanel); // Bottom: Custom pie chart drawing
+        add(rightPanel, BorderLayout.EAST);
 
         loadTransactions();
     }
@@ -110,54 +147,42 @@ public class TransactionPanel extends JPanel {
 
     // ================= FORM =================
     private JPanel createTopForm() {
+        JPanel mainPanel = new JPanel();
+        mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
 
-        JPanel panel = new JPanel(new GridBagLayout());
+        // 1. Transaction Input Panel (GridBagLayout for structured alignment)
+        JPanel inputPanel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
-
         gbc.insets = new Insets(5, 5, 5, 5);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        // ================= INPUT =================
+        // Labels
+        gbc.gridy = 0;
+        gbc.weightx = 0.0;
+        gbc.gridx = 0; inputPanel.add(new JLabel("Amount"), gbc);
+        gbc.gridx = 1; inputPanel.add(new JLabel("Type"), gbc);
+        gbc.gridx = 2; inputPanel.add(new JLabel("Category"), gbc);
+        gbc.gridx = 3; inputPanel.add(new JLabel("Note"), gbc);
+
+        // Inputs
         amountField = new JTextField(10);
-        noteField = new JTextField(10);
+        noteField = new JTextField(15);
 
         typeBox = new JComboBox<>(new String[]{"Income", "Expense"});
         categoryBox = new JComboBox<>(new String[]{
                 "Food", "Transport", "Shopping", "Bills", "Other"
         });
 
+        gbc.gridy = 1;
+        gbc.gridx = 0; gbc.weightx = 0.15; inputPanel.add(amountField, gbc);
+        gbc.gridx = 1; gbc.weightx = 0.15; inputPanel.add(typeBox, gbc);
+        gbc.gridx = 2; gbc.weightx = 0.15; inputPanel.add(categoryBox, gbc);
+        gbc.gridx = 3; gbc.weightx = 0.35; inputPanel.add(noteField, gbc);
+
+        // CRUD Buttons
         JButton addBtn = new JButton("Add");
         JButton editBtn = new JButton("Edit");
         JButton deleteBtn = new JButton("Delete");
-
-        // ================= FILTER =================
-        searchField = new JTextField(10);
-
-        filterCategoryBox = new JComboBox<>(new String[]{
-                "All", "Food", "Transport", "Shopping", "Bills", "Other"
-        });
-
-        JButton searchBtn = new JButton("Search");
-        JButton resetBtn = new JButton("Reset");
-
-        JButton exportTxtBtn = new JButton("Export TXT");
-        JButton exportCsvBtn = new JButton("Export CSV");
-
-        // ================= ROW 1 =================
-        gbc.gridy = 0;
-
-        gbc.gridx = 0; panel.add(new JLabel("Amount"), gbc);
-        gbc.gridx = 1; panel.add(new JLabel("Type"), gbc);
-        gbc.gridx = 2; panel.add(new JLabel("Category"), gbc);
-        gbc.gridx = 3; panel.add(new JLabel("Note"), gbc);
-
-        // ================= ROW 2 =================
-        gbc.gridy = 1;
-
-        gbc.gridx = 0; panel.add(amountField, gbc);
-        gbc.gridx = 1; panel.add(typeBox, gbc);
-        gbc.gridx = 2; panel.add(categoryBox, gbc);
-        gbc.gridx = 3; panel.add(noteField, gbc);
 
         JPanel crudPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         crudPanel.add(addBtn);
@@ -165,29 +190,44 @@ public class TransactionPanel extends JPanel {
         crudPanel.add(deleteBtn);
 
         gbc.gridx = 4;
-        panel.add(crudPanel, gbc);
+        gbc.weightx = 0.20;
+        inputPanel.add(crudPanel, gbc);
 
-        // ================= ROW 3 =================
-        gbc.gridy = 2;
+        // 2. Filter & Export Panel (combined in one row using BorderLayout)
+        JPanel filterExportPanel = new JPanel(new BorderLayout());
+        filterExportPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
 
-        gbc.gridx = 0; panel.add(new JLabel("Search"), gbc);
-        gbc.gridx = 1; panel.add(searchField, gbc);
-        gbc.gridx = 2; panel.add(filterCategoryBox, gbc);
-        gbc.gridx = 3; panel.add(searchBtn, gbc);
-        gbc.gridx = 4; panel.add(resetBtn, gbc);
+        // Filter sub-panel (left aligned)
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        searchField = new JTextField(12);
+        filterCategoryBox = new JComboBox<>(new String[]{
+                "All", "Food", "Transport", "Shopping", "Bills", "Other"
+        });
+        JButton searchBtn = new JButton("Search");
+        JButton resetBtn = new JButton("Reset");
 
-        // ================= ROW 4 (EXPORT) =================
-        gbc.gridy = 3;
-        gbc.gridx = 3;
+        filterPanel.add(new JLabel("Search:"));
+        filterPanel.add(searchField);
+        filterPanel.add(new JLabel("Category:"));
+        filterPanel.add(filterCategoryBox);
+        filterPanel.add(searchBtn);
+        filterPanel.add(resetBtn);
 
+        // Export sub-panel (right aligned)
         JPanel exportPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
+        JButton exportTxtBtn = new JButton("Export TXT");
+        JButton exportCsvBtn = new JButton("Export CSV");
         exportPanel.add(exportTxtBtn);
         exportPanel.add(exportCsvBtn);
 
-        gbc.gridwidth = 2;
-        panel.add(exportPanel, gbc);
+        filterExportPanel.add(filterPanel, BorderLayout.WEST);
+        filterExportPanel.add(exportPanel, BorderLayout.EAST);
 
-        // ================= ACTIONS =================
+        // Add both rows to main panel
+        mainPanel.add(inputPanel);
+        mainPanel.add(filterExportPanel);
+
+        // Actions
         addBtn.addActionListener(e -> addTransaction());
         editBtn.addActionListener(e -> editTransaction());
         deleteBtn.addActionListener(e -> deleteTransaction());
@@ -198,7 +238,7 @@ public class TransactionPanel extends JPanel {
         exportTxtBtn.addActionListener(e -> exportTXT());
         exportCsvBtn.addActionListener(e -> exportCSV());
 
-        return panel;
+        return mainPanel;
     }
 
     // ================= TABLE =================
@@ -211,7 +251,7 @@ public class TransactionPanel extends JPanel {
         table = new JTable(tableModel);
 
         // 🔥 1. Enable horizontal scrolling
-        table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 
         // 🔥 2. Set column widths
         table.getColumnModel().getColumn(0).setPreferredWidth(50);
@@ -225,12 +265,9 @@ public class TransactionPanel extends JPanel {
 
         JScrollPane scrollPane = new JScrollPane(table);
 
-        // 🔥 Fix size (important for centering)
-        scrollPane.setPreferredSize(new Dimension(750, 300));
-
-        // 🔥 CENTER WRAPPER
-        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        wrapper.add(scrollPane);
+        // 🔥 FULL-WIDTH BORDERLAYOUT WRAPPER
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.add(scrollPane, BorderLayout.CENTER);
 
         return wrapper;
     }
@@ -358,6 +395,11 @@ public class TransactionPanel extends JPanel {
         }
 
         updateSummary();
+        checkBudgetAlerts();
+        updateInsights(); // 🔥 ADD THIS
+        pieChartPanel.updateData(list); // 🔥 Update the custom Pie Chart drawing
+        revalidate();
+        repaint();
     }
 
     // ================= SUMMARY =================
@@ -426,11 +468,93 @@ public class TransactionPanel extends JPanel {
         allTransactions = transactionService.loadTransactions(username);
         refreshTable(allTransactions);
 
-        transactionId = allTransactions.size()+1;
+        int maxId = 0;
+        for (Transaction t : allTransactions) {
+            if (t.getId() > maxId) {
+                maxId = t.getId();
+            }
+        }
+        transactionId = maxId + 1;
     }
 
     private void clearFields(){
         amountField.setText("");
         noteField.setText("");
     }
+
+    private JPanel createNotificationPanel() {
+
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setPreferredSize(new Dimension(250, 0)); // 🔥 FIX WIDTH
+
+        panel.setBorder(BorderFactory.createTitledBorder("Notifications"));
+
+        notificationArea = new JTextArea();
+        notificationArea.setEditable(false);
+        notificationArea.setLineWrap(true);
+        notificationArea.setWrapStyleWord(true);
+
+        notificationArea.setForeground(Color.RED);
+        notificationArea.setBackground(new Color(250, 250, 250));
+
+        JScrollPane scroll = new JScrollPane(notificationArea);
+
+        panel.add(scroll, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private void checkBudgetAlerts() {
+
+        Map<String, Double> spentMap =
+                budgetService.calculateCategoryExpenses(allTransactions);
+
+        StringBuilder alerts = new StringBuilder();
+
+        for (String category : spentMap.keySet()) {
+
+            double spent = spentMap.get(category);
+
+            String alert = budgetService.getBudgetAlert(category, spent);
+
+            if (alert != null) {
+                alerts.append(alert).append("\n");
+            }
+        }
+
+        // Show in notification panel
+        notificationArea.setText(alerts.toString());
+
+        // Optional popup (only if alert exists)
+        if (alerts.length() > 0) {
+            JOptionPane.showMessageDialog(this, alerts.toString());
+        }
+    }
+
+    private JPanel createInsightPanel() {
+
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder("Insights"));
+
+        insightArea = new JTextArea(); // ✅ store reference
+        insightArea.setEditable(false);
+        insightArea.setLineWrap(true);
+        insightArea.setWrapStyleWord(true);
+
+        insightArea.setBackground(new Color(245, 245, 245));
+
+        panel.add(new JScrollPane(insightArea), BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private void updateInsights() {
+
+        String insights =
+                insightService.generateInsights(allTransactions);
+
+        insightArea.setText(insights);
+    }
+
+//
 }

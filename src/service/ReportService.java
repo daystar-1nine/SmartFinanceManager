@@ -60,13 +60,15 @@ public class ReportService {
 
             // Data
             for (Transaction t : transactions) {
+                String note = t.getNote();
+                String safeNote = note == null ? "" : note.replace(",", " ");
 
                 writer.write(
                         t.getId() + "," +
                                 t.getType() + "," +
                                 t.getAmount() + "," +
                                 t.getCategory() + "," +
-                                t.getNote().replace(",", " ") + "," +
+                                safeNote + "," +
                                 t.getDate()
                 );
 

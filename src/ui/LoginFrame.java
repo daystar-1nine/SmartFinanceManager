@@ -98,7 +98,8 @@ public class LoginFrame extends JFrame {
          * Opens signup screen
          */
         signupButton.addActionListener(e -> {
-            new SignupFrame();
+            setVisible(false);
+            new SignupFrame(this);
         });
 
         setVisible(true);
