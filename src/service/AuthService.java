@@ -2,94 +2,177 @@ package service;
 
 import model.User;
 import util.FileUtil;
+import util.Constants;
 
+import java.time.LocalDate;
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * AuthService Class
  * -----------------
- * Handles all authentication-related operations such as
- * user registration (signup) and login.
+ * Handles user authentication, registration, credential security, and automatic hashing upgrades.
  */
 public class AuthService {
 
-    // Path where user data is stored
-    private static final String USER_FILE = "SmartFinanceManager/src/data/users/users.txt";
+    private static final String USER_FILE = Constants.USER_FILE;
 
     /**
-     * Registers a new user
-     *
-     * @param username user's username
-     * @param password user's password
-     * @return true if signup successful, false otherwise
+     * Hashes a password string using SHA-256 cryptosystems.
+     */
+    public static String hashPassword(String password) {
+        if (password == null) return null;
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(password.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Error hashing password", e);
+        }
+    }
+
+    /**
+     * Registers a new user, hashing the password before writing to file.
      */
     public boolean signup(String username, String password) {
-
-        // Basic validation
         if (username == null || username.isEmpty() ||
                 password == null || password.isEmpty()) {
             return false;
         }
 
-        // Check if user already exists
         if (userExists(username)) {
-            return false; // duplicate username not allowed
+            return false; // Duplicate username not allowed
         }
 
-        // Create User object
-        User user = new User(username, password);
+        // Create User object with hashed password
+        User user = new User(username, hashPassword(password), username.toLowerCase() + "@example.com", LocalDate.now().toString());
 
-        // Save user to file using model method
+        // Save user to file
         FileUtil.writeToFile(USER_FILE, user.toFileString(), true);
 
         return true;
     }
 
     /**
-     * Logs in a user by checking credentials
-     *
-     * @param username input username
-     * @param password input password
-     * @return true if credentials match, false otherwise
+     * Logs in a user by checking credentials.
+     * Backwards-compatible: Automatically upgrades legacy plaintext passwords to SHA-256 hashes.
      */
     public boolean login(String username, String password) {
+        List<String> usersLines = FileUtil.readFromFile(USER_FILE);
+        String hashedInput = hashPassword(password);
+        boolean authenticated = false;
+        boolean needUpgrade = false;
 
+        for (String line : usersLines) {
+            User user = User.fromFileString(line);
+
+            if (user != null && user.getUsername().equalsIgnoreCase(username)) {
+                if (user.getPassword().equals(hashedInput)) {
+                    authenticated = true;
+                    break;
+                } else if (user.getPassword().equals(password)) {
+                    // Authenticated via legacy plaintext match; flag for password upgrade
+                    authenticated = true;
+                    needUpgrade = true;
+                    break;
+                }
+            }
+        }
+
+        // Seamlessly hash legacy plaintext password upon successful login
+        if (authenticated && needUpgrade) {
+            List<User> usersList = new ArrayList<>();
+            for (String line : usersLines) {
+                User user = User.fromFileString(line);
+                if (user != null) {
+                    if (user.getUsername().equalsIgnoreCase(username)) {
+                        user.setPassword(hashedInput);
+                    }
+                    usersList.add(user);
+                }
+            }
+            // Overwrite file with upgraded records
+            FileUtil.clearFile(USER_FILE);
+            for (User u : usersList) {
+                FileUtil.writeToFile(USER_FILE, u.toFileString(), true);
+            }
+        }
+
+        return authenticated;
+    }
+
+    /**
+     * Retrieves a User object by username
+     */
+    public User getUser(String username) {
         List<String> users = FileUtil.readFromFile(USER_FILE);
 
         for (String line : users) {
             User user = User.fromFileString(line);
+            if (user != null && user.getUsername().equalsIgnoreCase(username)) {
+                return user;
+            }
+        }
+        return new User(username, hashPassword("1234"), username.toLowerCase() + "@example.com", LocalDate.now().toString());
+    }
 
-            if (user != null &&
-                    user.getUsername().equals(username) &&
-                    user.getPassword().equals(password)) {
+    /**
+     * Updates password and email for a user, hashing the new password.
+     */
+    public boolean updateUserCredentials(String username, String newPassword, String newEmail) {
+        if (newPassword == null || newPassword.isEmpty() || newEmail == null || newEmail.isEmpty()) {
+            return false;
+        }
 
-                return true;
+        List<String> lines = FileUtil.readFromFile(USER_FILE);
+        List<User> users = new ArrayList<>();
+        boolean updated = false;
+
+        for (String line : lines) {
+            User user = User.fromFileString(line);
+            if (user != null) {
+                if (user.getUsername().equalsIgnoreCase(username)) {
+                    user.setPassword(hashPassword(newPassword));
+                    user.setEmail(newEmail);
+                    updated = true;
+                }
+                users.add(user);
             }
         }
 
-        return false;
+        if (updated) {
+            FileUtil.clearFile(USER_FILE);
+            for (User u : users) {
+                FileUtil.writeToFile(USER_FILE, u.toFileString(), true);
+            }
+        }
+
+        return updated;
     }
 
     /**
      * Checks whether a username already exists
-     *
-     * @param username username to check
-     * @return true if user exists
      */
     private boolean userExists(String username) {
-
         List<String> users = FileUtil.readFromFile(USER_FILE);
 
         for (String line : users) {
             User user = User.fromFileString(line);
 
-            if (user != null &&
-                    user.getUsername().equals(username)) {
-
+            if (user != null && user.getUsername().equalsIgnoreCase(username)) {
                 return true;
             }
         }
-
         return false;
     }
 }

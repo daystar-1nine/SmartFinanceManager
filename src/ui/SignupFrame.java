@@ -1,6 +1,7 @@
 package ui;
 
 import service.AuthService;
+import util.ThemeUtil;
 
 import javax.swing.*;
 import java.awt.*;
@@ -39,6 +40,8 @@ public class SignupFrame extends JFrame {
         // Main panel with spacing
         JPanel panel = new JPanel(new GridLayout(7, 1, 10, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
+        panel.setBackground(ThemeUtil.getBackgroundColor());
+        getContentPane().setBackground(ThemeUtil.getBackgroundColor());
 
         // Input fields
         usernameField = new JTextField();
@@ -117,6 +120,7 @@ public class SignupFrame extends JFrame {
 
         });
 
+        ThemeUtil.applyTheme(this);
         setVisible(true);
     }
 }

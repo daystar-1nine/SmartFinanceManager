@@ -72,7 +72,7 @@ public class PieChartPanel extends JPanel {
             g2d.fillOval(x, y, size, size);
             
             g2d.setColor(new Color(120, 120, 120));
-            g2d.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            g2d.setFont(new Font("SansSerif", Font.BOLD, 12));
             String msg = "No expenses recorded";
             FontMetrics fm = g2d.getFontMetrics();
             int msgWidth = fm.stringWidth(msg);
@@ -115,7 +115,7 @@ public class PieChartPanel extends JPanel {
         // Draw a compact wrapping legend at the bottom
         int legendY = py + pieSize + 15;
         int legendX = insets.left + 5;
-        g2d.setFont(new Font("Segoe UI", Font.BOLD, 10));
+        g2d.setFont(new Font("SansSerif", Font.BOLD, 10));
         FontMetrics fm = g2d.getFontMetrics();
         
         int itemX = legendX;

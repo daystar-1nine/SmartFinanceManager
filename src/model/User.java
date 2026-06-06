@@ -1,73 +1,73 @@
 package model;
 
+import java.time.LocalDate;
+
 /**
  * User Model Class
  * ----------------
- * This class represents a user in the system.
- * It stores user credentials and basic profile information.
- *
- * This class follows encapsulation (data hiding) principles.
+ * Represents a user in the system, storing credentials, email, and registration date.
  */
 public class User {
 
-    // Username of the user (unique identifier)
     private String username;
-
-    // Password of the user (stored as plain text for now - can be improved later)
     private String password;
+    private String email;
+    private String registrationDate;
 
-    /**
-     * Constructor to initialize user object
-     *
-     * @param username the username entered by user
-     * @param password the password entered by user
-     */
-    public User(String username, String password) {
+    public User(String username, String password, String email, String registrationDate) {
         this.username = username;
         this.password = password;
+        this.email = email;
+        this.registrationDate = registrationDate;
     }
 
-    /**
-     * Getter method to retrieve username
-     *
-     * @return username of the user
-     */
     public String getUsername() {
         return username;
     }
 
-    /**
-     * Getter method to retrieve password
-     *
-     * NOTE: In real-world applications, passwords should never be exposed like this.
-     * This is kept simple for learning purposes.
-     *
-     * @return password of the user
-     */
     public String getPassword() {
         return password;
     }
 
-    /**
-     * Converts user object into file-friendly format
-     * Example: suraj,1234
-     *
-     * @return formatted string for file storage
-     */
-    public String toFileString() {
-        return username + "," + password;
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getRegistrationDate() {
+        return registrationDate;
     }
 
     /**
-     * Static method to create User object from file data
-     *
-     * @param line a line from file (username,password)
-     * @return User object
+     * Converts user object into file-friendly format
+     * Example: suraj,1234,suraj@example.com,2026-06-06
+     */
+    public String toFileString() {
+        return username + "," + password + "," + email + "," + registrationDate;
+    }
+
+    /**
+     * Creates a User object from file data.
+     * Backwards-compatible: Handles lines with only username and password.
      */
     public static User fromFileString(String line) {
+        if (line == null || line.trim().isEmpty()) {
+            return null;
+        }
         String[] parts = line.split(",");
-        if (parts.length == 2) {
-            return new User(parts[0], parts[1]);
+        if (parts.length >= 2) {
+            String username = parts[0].trim();
+            String password = parts[1].trim();
+            String email = parts.length >= 3 ? parts[2].trim() : (username.toLowerCase() + "@example.com");
+            String regDate = parts.length >= 4 ? parts[3].trim() : LocalDate.now().toString();
+            return new User(username, password, email, regDate);
         }
         return null;
     }

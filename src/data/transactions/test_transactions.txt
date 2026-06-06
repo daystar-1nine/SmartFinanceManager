@@ -1,2 +1,4 @@
 1,Income,50000.0,Other,,2026-06-05
 2,Expense,500.0,Food,,2026-06-05
+3,Income,50000.0,Other,,2026-06-06
+5,Expense,3800.0,Transport,tarin pass,2026-06-06

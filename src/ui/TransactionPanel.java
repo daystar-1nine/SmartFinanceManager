@@ -15,8 +15,12 @@ import service.ReportService;
 import service.BudgetService;
 import java.util.Map;
 import service.InsightService;
+import util.ThemeUtil;
+
+import util.Constants;
 
 import javax.swing.*;
+import javax.swing.border.TitledBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.io.File;
@@ -33,7 +37,7 @@ import java.util.List;
  * ✔ Summary + Financial Score
  * ✔ Export TXT / CSV
  */
-public class TransactionPanel extends JPanel {
+public class TransactionPanel extends JPanel implements Scrollable {
 
     // ================= SERVICES =================
     private InsightService insightService; // ✅ ADD THIS
@@ -75,12 +79,20 @@ public class TransactionPanel extends JPanel {
     private JTextArea insightArea;
     private PieChartPanel pieChartPanel; // 🔥 ADD THIS
 
+    // ================= LANGUAGE REFRESHABLE FIELDS =================
+    private JLabel amountLabel, typeLabel, categoryLabel, noteLabel;
+    private JButton addBtn, editBtn, deleteBtn;
+    private JLabel searchLabel, filterCategoryLabel;
+    private JButton searchBtn, resetBtn;
+    private JButton exportTxtBtn, exportCsvBtn;
+    private JPanel notificationPanel, insightPanel;
+
     // ================= CONSTRUCTOR =================
     public TransactionPanel(String username) {
 
         this.username = username;
         this.transactionService = new TransactionService();
-        this.budgetService = new BudgetService();
+        this.budgetService = new BudgetService(username);
         this.insightService = new InsightService();
         this.pieChartPanel = new PieChartPanel(); // 🔥 ADD THIS
 
@@ -106,6 +118,9 @@ public class TransactionPanel extends JPanel {
         add(rightPanel, BorderLayout.EAST);
 
         loadTransactions();
+
+        // Apply active theme colors recursively
+        ThemeUtil.applyTheme(this);
     }
 
     // ================= SUMMARY PANEL =================
@@ -157,21 +172,24 @@ public class TransactionPanel extends JPanel {
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
         // Labels
+        amountLabel = new JLabel("Amount");
+        typeLabel = new JLabel("Type");
+        categoryLabel = new JLabel("Category");
+        noteLabel = new JLabel("Note");
+
         gbc.gridy = 0;
         gbc.weightx = 0.0;
-        gbc.gridx = 0; inputPanel.add(new JLabel("Amount"), gbc);
-        gbc.gridx = 1; inputPanel.add(new JLabel("Type"), gbc);
-        gbc.gridx = 2; inputPanel.add(new JLabel("Category"), gbc);
-        gbc.gridx = 3; inputPanel.add(new JLabel("Note"), gbc);
+        gbc.gridx = 0; inputPanel.add(amountLabel, gbc);
+        gbc.gridx = 1; inputPanel.add(typeLabel, gbc);
+        gbc.gridx = 2; inputPanel.add(categoryLabel, gbc);
+        gbc.gridx = 3; inputPanel.add(noteLabel, gbc);
 
         // Inputs
         amountField = new JTextField(10);
         noteField = new JTextField(15);
 
-        typeBox = new JComboBox<>(new String[]{"Income", "Expense"});
-        categoryBox = new JComboBox<>(new String[]{
-                "Food", "Transport", "Shopping", "Bills", "Other"
-        });
+        typeBox = new JComboBox<>();
+        categoryBox = new JComboBox<>();
 
         gbc.gridy = 1;
         gbc.gridx = 0; gbc.weightx = 0.15; inputPanel.add(amountField, gbc);
@@ -180,9 +198,9 @@ public class TransactionPanel extends JPanel {
         gbc.gridx = 3; gbc.weightx = 0.35; inputPanel.add(noteField, gbc);
 
         // CRUD Buttons
-        JButton addBtn = new JButton("Add");
-        JButton editBtn = new JButton("Edit");
-        JButton deleteBtn = new JButton("Delete");
+        addBtn = new JButton("Add");
+        editBtn = new JButton("Edit");
+        deleteBtn = new JButton("Delete");
 
         JPanel crudPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         crudPanel.add(addBtn);
@@ -200,23 +218,24 @@ public class TransactionPanel extends JPanel {
         // Filter sub-panel (left aligned)
         JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         searchField = new JTextField(12);
-        filterCategoryBox = new JComboBox<>(new String[]{
-                "All", "Food", "Transport", "Shopping", "Bills", "Other"
-        });
-        JButton searchBtn = new JButton("Search");
-        JButton resetBtn = new JButton("Reset");
+        filterCategoryBox = new JComboBox<>();
+        searchBtn = new JButton("Search");
+        resetBtn = new JButton("Reset");
 
-        filterPanel.add(new JLabel("Search:"));
+        searchLabel = new JLabel("Search:");
+        filterCategoryLabel = new JLabel("Category:");
+
+        filterPanel.add(searchLabel);
         filterPanel.add(searchField);
-        filterPanel.add(new JLabel("Category:"));
+        filterPanel.add(filterCategoryLabel);
         filterPanel.add(filterCategoryBox);
         filterPanel.add(searchBtn);
         filterPanel.add(resetBtn);
 
         // Export sub-panel (right aligned)
         JPanel exportPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
-        JButton exportTxtBtn = new JButton("Export TXT");
-        JButton exportCsvBtn = new JButton("Export CSV");
+        exportTxtBtn = new JButton("Export TXT");
+        exportCsvBtn = new JButton("Export CSV");
         exportPanel.add(exportTxtBtn);
         exportPanel.add(exportCsvBtn);
 
@@ -278,11 +297,14 @@ public class TransactionPanel extends JPanel {
         try {
             double amount = Double.parseDouble(amountField.getText());
 
+            String txType = typeBox.getSelectedIndex() == 0 ? "Income" : "Expense";
+            String txCategory = Constants.CATEGORIES[categoryBox.getSelectedIndex()];
+
             Transaction t = new Transaction(
                     transactionId++,
-                    typeBox.getSelectedItem().toString(),
+                    txType,
                     amount,
-                    categoryBox.getSelectedItem().toString(),
+                    txCategory,
                     noteField.getText(),
                     LocalDate.now()
             );
@@ -307,14 +329,16 @@ public class TransactionPanel extends JPanel {
 
         for(int i=0;i<allTransactions.size();i++){
             if(allTransactions.get(i).getId()==id){
-
+                LocalDate originalDate = allTransactions.get(i).getDate();
+                String txType = typeBox.getSelectedIndex() == 0 ? "Income" : "Expense";
+                String txCategory = Constants.CATEGORIES[categoryBox.getSelectedIndex()];
                 allTransactions.set(i, new Transaction(
                         id,
-                        typeBox.getSelectedItem().toString(),
+                        txType,
                         Double.parseDouble(amountField.getText()),
-                        categoryBox.getSelectedItem().toString(),
+                        txCategory,
                         noteField.getText(),
-                        LocalDate.now()
+                        originalDate
                 ));
                 break;
             }
@@ -357,14 +381,14 @@ public class TransactionPanel extends JPanel {
     private void applyFilter() {
 
         String keyword = searchField.getText().toLowerCase();
-        String category = filterCategoryBox.getSelectedItem().toString();
+        int catIdx = filterCategoryBox.getSelectedIndex();
 
         List<Transaction> filtered = new ArrayList<>();
 
         for(Transaction t : allTransactions){
 
             boolean match = t.getNote().toLowerCase().contains(keyword);
-            boolean cat = category.equals("All") || t.getCategory().equals(category);
+            boolean cat = (catIdx == 0) || t.getCategory().equals(Constants.CATEGORIES[catIdx - 1]);
 
             if(match && cat) filtered.add(t);
         }
@@ -384,11 +408,13 @@ public class TransactionPanel extends JPanel {
         tableModel.setRowCount(0);
 
         for (Transaction t : list) {
+            String localizedType = "Income".equalsIgnoreCase(t.getType()) ? "Income" : "Expense";
+            String localizedCategory = t.getCategory();
             tableModel.addRow(new Object[]{
                     t.getId(),
-                    t.getType(),
+                    localizedType,
                     String.format("%.2f", t.getAmount()),
-                    t.getCategory(),
+                    localizedCategory,
                     t.getNote(),
                     t.getDate()
             });
@@ -408,15 +434,15 @@ public class TransactionPanel extends JPanel {
         double income = 0, expense = 0;
 
         for (Transaction t : allTransactions) {
-            if ("Income".equals(t.getType())) income += t.getAmount();
+            if ("Income".equalsIgnoreCase(t.getType())) income += t.getAmount();
             else expense += t.getAmount();
         }
 
         double balance = income - expense;
 
-        incomeLabel.setText("Income: ₹" + String.format("%,.2f", income));
-        expenseLabel.setText("Expense: ₹" + String.format("%,.2f", expense));
-        balanceLabel.setText("Balance: ₹" + String.format("%,.2f", balance));
+        incomeLabel.setText("Income" + ": ₹" + String.format("%,.2f", income));
+        expenseLabel.setText("Expense" + ": ₹" + String.format("%,.2f", expense));
+        balanceLabel.setText("Balance" + ": ₹" + String.format("%,.2f", balance));
 
         updateScore(income, expense);
     }
@@ -428,7 +454,7 @@ public class TransactionPanel extends JPanel {
 
         if(income==0){
             scoreBar.setValue(0);
-            scoreLabel.setText("Score: 0");
+            scoreLabel.setText("Score" + ": 0/100");
             statusLabel.setText("No Income");
             return;
         }
@@ -442,9 +468,10 @@ public class TransactionPanel extends JPanel {
         score = Math.max(score,0);
 
         scoreBar.setValue(score);
-        scoreLabel.setText("Score: "+score+"/100");
+        scoreLabel.setText("Score" + ": " + score + "/100");
 
-        statusLabel.setText(percent>=40?"Excellent":percent>=20?"Good":"Poor");
+        String status = percent >= 40 ? "Excellent" : percent >= 20 ? "Good" : "Poor";
+        statusLabel.setText(status);
     }
 
     // ================= EXPORT =================
@@ -484,10 +511,10 @@ public class TransactionPanel extends JPanel {
 
     private JPanel createNotificationPanel() {
 
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setPreferredSize(new Dimension(250, 0)); // 🔥 FIX WIDTH
+        notificationPanel = new JPanel(new BorderLayout());
+        notificationPanel.setPreferredSize(new Dimension(250, 0)); // 🔥 FIX WIDTH
 
-        panel.setBorder(BorderFactory.createTitledBorder("Notifications"));
+        notificationPanel.setBorder(BorderFactory.createTitledBorder("Notifications"));
 
         notificationArea = new JTextArea();
         notificationArea.setEditable(false);
@@ -499,9 +526,9 @@ public class TransactionPanel extends JPanel {
 
         JScrollPane scroll = new JScrollPane(notificationArea);
 
-        panel.add(scroll, BorderLayout.CENTER);
+        notificationPanel.add(scroll, BorderLayout.CENTER);
 
-        return panel;
+        return notificationPanel;
     }
 
     private void checkBudgetAlerts() {
@@ -533,8 +560,8 @@ public class TransactionPanel extends JPanel {
 
     private JPanel createInsightPanel() {
 
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Insights"));
+        insightPanel = new JPanel(new BorderLayout());
+        insightPanel.setBorder(BorderFactory.createTitledBorder("Insights"));
 
         insightArea = new JTextArea(); // ✅ store reference
         insightArea.setEditable(false);
@@ -543,9 +570,9 @@ public class TransactionPanel extends JPanel {
 
         insightArea.setBackground(new Color(245, 245, 245));
 
-        panel.add(new JScrollPane(insightArea), BorderLayout.CENTER);
+        insightPanel.add(new JScrollPane(insightArea), BorderLayout.CENTER);
 
-        return panel;
+        return insightPanel;
     }
 
     private void updateInsights() {
@@ -556,5 +583,37 @@ public class TransactionPanel extends JPanel {
         insightArea.setText(insights);
     }
 
-//
+    // ================= SCROLLABLE IMPLEMENTATION =================
+    @Override
+    public Dimension getPreferredScrollableViewportSize() {
+        return getPreferredSize();
+    }
+
+    @Override
+    public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+        return 16;
+    }
+
+    @Override
+    public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+        return 64;
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportWidth() {
+        if (getParent() instanceof JViewport) {
+            return getParent().getWidth() > getPreferredSize().width;
+        }
+        return true;
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportHeight() {
+        if (getParent() instanceof JViewport) {
+            return getParent().getHeight() > getPreferredSize().height;
+        }
+        return false;
+    }
+
+    
 }
