@@ -2,6 +2,7 @@ package ui;
 
 import service.AuthService;
 import util.ThemeUtil;
+import util.IconUtil;
 
 import javax.swing.*;
 import java.awt.*;
@@ -22,14 +23,29 @@ public class LoginFrame extends JFrame {
 
         // Frame settings
         setTitle("Smart Finance Manager - Login");
-        setSize(400, 300);
+        setSize(400, 350);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
+        IconUtil.setAppIcon(this);
+
+        // Branding Logo Panel
+        JPanel logoPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 15));
+        logoPanel.setBackground(ThemeUtil.getBackgroundColor());
+        java.net.URL logoUrl = LoginFrame.class.getResource("/resources/rupee.png");
+        if (logoUrl != null) {
+            java.awt.Image img = new javax.swing.ImageIcon(logoUrl).getImage().getScaledInstance(45, 45, java.awt.Image.SCALE_SMOOTH);
+            JLabel logoLabel = new JLabel(new javax.swing.ImageIcon(img));
+            logoPanel.add(logoLabel);
+        }
+        JLabel titleLabel = new JLabel("Smart Finance");
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 20));
+        titleLabel.setForeground(ThemeUtil.getTextColor());
+        logoPanel.add(titleLabel);
 
         // Main panel with padding
         JPanel panel = new JPanel();
-        panel.setLayout(new GridLayout(5, 1, 10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
+        panel.setLayout(new GridLayout(4, 1, 5, 5));
+        panel.setBorder(BorderFactory.createEmptyBorder(5, 20, 5, 20));
         panel.setBackground(ThemeUtil.getBackgroundColor());
 
         // Input fields
@@ -53,6 +69,8 @@ public class LoginFrame extends JFrame {
         buttonPanel.add(loginButton);
         buttonPanel.add(signupButton);
 
+        setLayout(new BorderLayout());
+        add(logoPanel, BorderLayout.NORTH);
         add(panel, BorderLayout.CENTER);
         add(buttonPanel, BorderLayout.SOUTH);
         getContentPane().setBackground(ThemeUtil.getBackgroundColor());

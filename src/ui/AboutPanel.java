@@ -118,6 +118,13 @@ public class AboutPanel extends JPanel {
         // Assemble vertically
         JPanel vbox = new JPanel(new GridLayout(0, 1, 8, 8));
         vbox.setOpaque(false);
+        java.net.URL logoUrl = AboutPanel.class.getResource("/resources/rupee.png");
+        if (logoUrl != null) {
+            java.awt.Image img = new javax.swing.ImageIcon(logoUrl).getImage().getScaledInstance(64, 64, java.awt.Image.SCALE_SMOOTH);
+            JLabel logoLabel = new JLabel(new javax.swing.ImageIcon(img));
+            logoLabel.setHorizontalAlignment(JLabel.CENTER);
+            vbox.add(logoLabel);
+        }
         vbox.add(title);
         vbox.add(desc);
         vbox.add(tagline);

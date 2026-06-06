@@ -2,6 +2,7 @@ package ui;
 
 import javax.swing.*;
 import java.awt.*;
+import util.IconUtil;
 
 /**
  * DashboardFrame Class
@@ -24,9 +25,27 @@ public class DashboardFrame extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
+        IconUtil.setAppIcon(this);
 
         // Sidebar Panel
         ui.components.Sidebar sidebar = new ui.components.Sidebar();
+
+        // Sidebar Header (Branding Logo)
+        java.net.URL logoUrl = DashboardFrame.class.getResource("/resources/rupee.png");
+        if (logoUrl != null) {
+            java.awt.Image img = new javax.swing.ImageIcon(logoUrl).getImage().getScaledInstance(45, 45, java.awt.Image.SCALE_SMOOTH);
+            JLabel logoLabel = new JLabel(new javax.swing.ImageIcon(img));
+            logoLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            sidebar.add(Box.createVerticalStrut(15));
+            sidebar.add(logoLabel);
+            
+            JLabel appTitle = new JLabel("Smart Finance");
+            appTitle.setForeground(Color.WHITE);
+            appTitle.setFont(new Font("SansSerif", Font.BOLD, 16));
+            appTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+            sidebar.add(Box.createVerticalStrut(8));
+            sidebar.add(appTitle);
+        }
 
         // Menu Buttons
         JButton dashboardBtn = createSidebarButton("Dashboard");

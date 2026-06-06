@@ -2,6 +2,7 @@ package ui;
 
 import service.AuthService;
 import util.ThemeUtil;
+import util.IconUtil;
 
 import javax.swing.*;
 import java.awt.*;
@@ -26,6 +27,7 @@ public class SignupFrame extends JFrame {
         setTitle("Smart Finance Manager - Signup");
         setSize(400, 300);
         setLocationRelativeTo(null);
+        IconUtil.setAppIcon(this);
 
         // Restore parent LoginFrame if this signup window is closed
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
