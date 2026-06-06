@@ -57,7 +57,7 @@ public class AboutPanel extends JPanel {
 
     private static final List<Member> TEAM = new ArrayList<>();
     static {
-        TEAM.add(new Member("Suraj Sawant", "Team Lead – Backend & Architecture",
+        TEAM.add(new Member("Suraj Sawant", "<html>Team Lead – Backend &amp; Architecture &bull; <font color='#2E7D32'><b>UI Developer</b></font></html>",
                 "Guides the architecture and server‑side logic.",
                 "https://github.com/daystar-1nine",
                 "https://www.linkedin.com/in/surajsawant19062005/"));
