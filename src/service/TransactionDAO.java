@@ -25,4 +25,14 @@ public interface TransactionDAO {
      * Saves all transactions for the specified user (overwriting current data).
      */
     void saveAllTransactions(String username, List<Transaction> transactions);
+
+    /**
+     * Deletes a transaction by ID atomically.
+     */
+    void deleteTransaction(String username, int txId);
+
+    /**
+     * Updates a transaction atomically.
+     */
+    void updateTransaction(String username, Transaction updatedTx);
 }

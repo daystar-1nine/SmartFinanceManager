@@ -21,7 +21,7 @@ public class AuthService {
     private static final String USER_FILE = Constants.USER_FILE;
 
     /**
-     * Hashes a password string using SHA-256 cryptosystems.
+     * Hashes a password string using SHA-256 cryptosystems (Legacy).
      */
     public static String hashPassword(String password) {
         if (password == null) return null;
@@ -42,6 +42,54 @@ public class AuthService {
         }
     }
 
+    private static final int ITERATIONS = 10000;
+    private static final int KEY_LENGTH = 256;
+
+    /**
+     * Hashes a password using PBKDF2WithHmacSHA256.
+     */
+    public static String hashPasswordPBKDF2(String password, String saltHex) {
+        if (password == null || saltHex == null) return null;
+        try {
+            byte[] salt = hexToBytes(saltHex);
+            char[] chars = password.toCharArray();
+            javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(chars, salt, ITERATIONS, KEY_LENGTH);
+            javax.crypto.SecretKeyFactory skf = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            byte[] hash = skf.generateSecret(spec).getEncoded();
+            return bytesToHex(hash);
+        } catch (Exception e) {
+            throw new RuntimeException("Error hashing password with PBKDF2", e);
+        }
+    }
+
+    /**
+     * Generates a cryptographically secure random salt.
+     */
+    public static String generateSalt() {
+        java.security.SecureRandom sr = new java.security.SecureRandom();
+        byte[] salt = new byte[16];
+        sr.nextBytes(salt);
+        return bytesToHex(salt);
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+
+    private static byte[] hexToBytes(String hex) {
+        int len = hex.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                                 + Character.digit(hex.charAt(i+1), 16));
+        }
+        return data;
+    }
+
     /**
      * Registers a new user, hashing the password before writing to file.
      */
@@ -55,8 +103,10 @@ public class AuthService {
             return false; // Duplicate username not allowed
         }
 
-        // Create User object with hashed password
-        User user = new User(username, hashPassword(password), username.toLowerCase() + "@example.com", LocalDate.now().toString());
+        // Create User object with PBKDF2 hashed password
+        String salt = generateSalt();
+        String hash = hashPasswordPBKDF2(password, salt);
+        User user = new User(username, salt + ":" + hash, username.toLowerCase() + "@example.com", LocalDate.now().toString());
 
         // Save user to file
         FileUtil.writeToFile(USER_FILE, user.toFileString(), true);
@@ -66,11 +116,10 @@ public class AuthService {
 
     /**
      * Logs in a user by checking credentials.
-     * Backwards-compatible: Automatically upgrades legacy plaintext passwords to SHA-256 hashes.
+     * Backwards-compatible: Automatically upgrades legacy passwords to PBKDF2 hashes.
      */
     public boolean login(String username, String password) {
         List<String> usersLines = FileUtil.readFromFile(USER_FILE);
-        String hashedInput = hashPassword(password);
         boolean authenticated = false;
         boolean needUpgrade = false;
 
@@ -78,26 +127,41 @@ public class AuthService {
             User user = User.fromFileString(line);
 
             if (user != null && user.getUsername().equalsIgnoreCase(username)) {
-                if (user.getPassword().equals(hashedInput)) {
-                    authenticated = true;
-                    break;
-                } else if (user.getPassword().equals(password)) {
-                    // Authenticated via legacy plaintext match; flag for password upgrade
-                    authenticated = true;
-                    needUpgrade = true;
-                    break;
+                String storedPass = user.getPassword();
+                if (storedPass.contains(":")) {
+                    // PBKDF2 Verification
+                    String[] parts = storedPass.split(":");
+                    if (parts.length == 2) {
+                        String salt = parts[0];
+                        String hash = parts[1];
+                        String inputHash = hashPasswordPBKDF2(password, salt);
+                        if (inputHash.equals(hash)) {
+                            authenticated = true;
+                            break;
+                        }
+                    }
+                } else {
+                    // Legacy Verification (SHA-256 or plaintext)
+                    String legacyHashed = hashPassword(password);
+                    if (storedPass.equals(legacyHashed) || storedPass.equals(password)) {
+                        authenticated = true;
+                        needUpgrade = true;
+                        break;
+                    }
                 }
             }
         }
 
-        // Seamlessly hash legacy plaintext password upon successful login
+        // Seamlessly upgrade legacy password to PBKDF2 upon successful login
         if (authenticated && needUpgrade) {
             List<User> usersList = new ArrayList<>();
             for (String line : usersLines) {
                 User user = User.fromFileString(line);
                 if (user != null) {
                     if (user.getUsername().equalsIgnoreCase(username)) {
-                        user.setPassword(hashedInput);
+                        String newSalt = generateSalt();
+                        String newHash = hashPasswordPBKDF2(password, newSalt);
+                        user.setPassword(newSalt + ":" + newHash);
                     }
                     usersList.add(user);
                 }
@@ -157,7 +221,9 @@ public class AuthService {
             User user = User.fromFileString(line);
             if (user != null) {
                 if (user.getUsername().equalsIgnoreCase(username)) {
-                    user.setPassword(hashPassword(newPassword));
+                    String salt = generateSalt();
+                    String hash = hashPasswordPBKDF2(newPassword, salt);
+                    user.setPassword(salt + ":" + hash);
                     user.setEmail(newEmail);
                     updated = true;
                 }

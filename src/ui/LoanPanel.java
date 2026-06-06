@@ -572,83 +572,98 @@ implements Scrollable {
     }
 
     private void refreshData() {
-        double totalOutstanding;
-        this.allLoans = this.loanService.loadLoans(this.username);
-        double totalGiven = 0.0;
-        double totalTaken = 0.0;
-        for (Loan l : this.allLoans) {
-            if (!"Active".equalsIgnoreCase(l.getStatus()) && !"Overdue".equalsIgnoreCase(l.getStatus())) continue;
-            if ("Given".equalsIgnoreCase(l.getType())) {
-                totalGiven += l.getRemainingAmount();
-                continue;
+        javax.swing.SwingWorker<List<Loan>, Void> worker = new javax.swing.SwingWorker<>() {
+            @Override
+            protected List<Loan> doInBackground() {
+                return loanService.loadLoans(username);
             }
-            totalTaken += l.getRemainingAmount();
-        }
-        double netPending = totalGiven - totalTaken;
-        this.givenLabel.setText(String.format("Total Given: \u20b9%,.2f", totalGiven));
-        this.takenLabel.setText(String.format("Total Taken: \u20b9%,.2f", totalTaken));
-        if (netPending >= 0.0) {
-            this.pendingLabel.setText(String.format("Net Pending: +\u20b9%,.2f", netPending));
-        } else {
-            this.pendingLabel.setText(String.format("Net Pending: -\u20b9%,.2f", Math.abs(netPending)));
-        }
-        this.applyFilters();
-        this.updateSummaryColors();
-        this.dataset.clear();
-        this.dataset.setValue("Given (Lent)", totalGiven);
-        this.dataset.setValue("Taken (Borrowed)", totalTaken);
-        this.updateChartStyle();
-        StringBuilder insights = new StringBuilder();
-        int activeOverdueCount = 0;
-        double highestGivenAmount = 0.0;
-        String highestDebtor = "Nobody";
-        int totalActiveCount = 0;
-        int activeGivenCount = 0;
-        int activeTakenCount = 0;
-        for (Loan l : this.allLoans) {
-            if ("Closed".equalsIgnoreCase(l.getStatus())) continue;
-            ++totalActiveCount;
-            double remaining = l.getRemainingAmount();
-            if ("Given".equalsIgnoreCase(l.getType())) {
-                ++activeGivenCount;
-                if (remaining > highestGivenAmount) {
-                    highestGivenAmount = remaining;
-                    highestDebtor = l.getPersonName();
+
+            @Override
+            protected void done() {
+                try {
+                    allLoans = get();
+                    double totalGiven = 0.0;
+                    double totalTaken = 0.0;
+                    for (Loan l : allLoans) {
+                        if (!"Active".equalsIgnoreCase(l.getStatus()) && !"Overdue".equalsIgnoreCase(l.getStatus())) continue;
+                        if ("Given".equalsIgnoreCase(l.getType())) {
+                            totalGiven += l.getRemainingAmount();
+                            continue;
+                        }
+                        totalTaken += l.getRemainingAmount();
+                    }
+                    double netPending = totalGiven - totalTaken;
+                    givenLabel.setText(String.format("Total Given: \u20b9%,.2f", totalGiven));
+                    takenLabel.setText(String.format("Total Taken: \u20b9%,.2f", totalTaken));
+                    if (netPending >= 0.0) {
+                        pendingLabel.setText(String.format("Net Pending: +\u20b9%,.2f", netPending));
+                    } else {
+                        pendingLabel.setText(String.format("Net Pending: -\u20b9%,.2f", Math.abs(netPending)));
+                    }
+                    applyFilters();
+                    updateSummaryColors();
+                    dataset.clear();
+                    dataset.setValue("Given (Lent)", totalGiven);
+                    dataset.setValue("Taken (Borrowed)", totalTaken);
+                    updateChartStyle();
+                    StringBuilder insights = new StringBuilder();
+                    int activeOverdueCount = 0;
+                    double highestGivenAmount = 0.0;
+                    String highestDebtor = "Nobody";
+                    int totalActiveCount = 0;
+                    int activeGivenCount = 0;
+                    int activeTakenCount = 0;
+                    for (Loan l : allLoans) {
+                        if ("Closed".equalsIgnoreCase(l.getStatus())) continue;
+                        ++totalActiveCount;
+                        double remaining = l.getRemainingAmount();
+                        if ("Given".equalsIgnoreCase(l.getType())) {
+                            ++activeGivenCount;
+                            if (remaining > highestGivenAmount) {
+                                highestGivenAmount = remaining;
+                                highestDebtor = l.getPersonName();
+                            }
+                        } else {
+                            ++activeTakenCount;
+                        }
+                        if ("Overdue".equalsIgnoreCase(l.getStatus())) {
+                            ++activeOverdueCount;
+                            long daysOverdue = ChronoUnit.DAYS.between(l.getDueDate(), LocalDate.now());
+                            insights.append(String.format("  \u274c %s's loan is overdue by %d days\n", l.getPersonName(), daysOverdue));
+                            continue;
+                        }
+                        if (!(l.getMonthlyEMI() > 0.0)) continue;
+                        insights.append(String.format("  \ud83d\udcc5 Next Payment: \u20b9%,.2f on %s (%s)\n", l.getMonthlyEMI(), l.getNextPaymentDate().toString(), l.getPersonName()));
+                    }
+                    insights.append("\n");
+                    if (highestGivenAmount > 0.0) {
+                        insights.append(String.format("\ud83d\udc64 %s owes you the most (\u20b9%,.2f).\n\n", highestDebtor, highestGivenAmount));
+                    }
+                    double totalOutstanding = totalGiven + totalTaken;
+                    if (totalOutstanding > 0.0) {
+                        insights.append(String.format("\ud83d\udcb0 \u20b9%,.2f is active in loans.\n\n", totalOutstanding));
+                    }
+                    if (activeOverdueCount > 0) {
+                        insights.append(String.format("\u26a0\ufe0f Warning: You have %d overdue loan(s)!\n\n", activeOverdueCount));
+                    }
+                    if (totalActiveCount > 5) {
+                        insights.append("\ud83d\udd04 Behavior: You lend or borrow frequently.\n\n");
+                    }
+                    if (activeGivenCount > activeTakenCount) {
+                        insights.append("\ud83d\udcc8 Behavior: You tend to act as a Lender.\n\n");
+                    } else if (activeTakenCount > activeGivenCount) {
+                        insights.append("\ud83d\udcc9 Behavior: You tend to act as a Borrower.\n\n");
+                    }
+                    if (totalActiveCount == 0) {
+                        insights.append("No active outstanding loans. Debt free!");
+                    }
+                    insightsArea.setText(insights.toString());
+                } catch (Exception e) {
+                    System.out.println("Error loading loans: " + e.getMessage());
                 }
-            } else {
-                ++activeTakenCount;
             }
-            if ("Overdue".equalsIgnoreCase(l.getStatus())) {
-                ++activeOverdueCount;
-                long daysOverdue = ChronoUnit.DAYS.between(l.getDueDate(), LocalDate.now());
-                insights.append(String.format("  ❌ %s's loan is overdue by %d days\n", l.getPersonName(), daysOverdue));
-                continue;
-            }
-            if (!(l.getMonthlyEMI() > 0.0)) continue;
-            insights.append(String.format("  📅 Next Payment: \u20b9%,.2f on %s (%s)\n", l.getMonthlyEMI(), l.getNextPaymentDate().toString(), l.getPersonName()));
-        }
-        insights.append("\n");
-        if (highestGivenAmount > 0.0) {
-            insights.append(String.format("👤 %s owes you the most (\u20b9%,.2f).\n\n", highestDebtor, highestGivenAmount));
-        }
-        if ((totalOutstanding = totalGiven + totalTaken) > 0.0) {
-            insights.append(String.format("💰 \u20b9%,.2f is active in loans.\n\n", totalOutstanding));
-        }
-        if (activeOverdueCount > 0) {
-            insights.append(String.format("⚠️ Warning: You have %d overdue loan(s)!\n\n", activeOverdueCount));
-        }
-        if (totalActiveCount > 5) {
-            insights.append("🔄 Behavior: You lend or borrow frequently.\n\n");
-        }
-        if (activeGivenCount > activeTakenCount) {
-            insights.append("📈 Behavior: You tend to act as a Lender.\n\n");
-        } else if (activeTakenCount > activeGivenCount) {
-            insights.append("📉 Behavior: You tend to act as a Borrower.\n\n");
-        }
-        if (totalActiveCount == 0) {
-            insights.append("No active outstanding loans. Debt free!");
-        }
-        this.insightsArea.setText(insights.toString());
+        };
+        worker.execute();
     }
 
     private void addLoan() {
@@ -657,7 +672,7 @@ implements Scrollable {
         LocalDate dueDate;
         double paidAmount;
         double totalAmount;
-        String name = this.personNameField.getText().trim();
+        String name = util.CSVUtil.sanitize(this.personNameField.getText());
         String type = this.typeBox.getSelectedIndex() == 0 ? "Given" : "Taken";
         String totalStr = this.totalAmountField.getText().trim();
         String paidStr = this.paidAmountField.getText().trim();
@@ -665,7 +680,7 @@ implements Scrollable {
         String interestStr = this.interestRateField.getText().trim();
         String interestType = this.interestTypeBox.getSelectedIndex() == 0 ? "Simple" : "Compound";
         String emiStr = this.emiField.getText().trim();
-        String note = this.noteField.getText().trim();
+        String note = util.CSVUtil.sanitize(this.noteField.getText());
         if (name.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Person Name cannot be empty.", "Validation Error", 0);
             return;
@@ -734,17 +749,29 @@ implements Scrollable {
         if (paidAmount > 0.0) {
             newLoan.getPaymentHistory().add(new Payment(paidAmount, LocalDate.now()));
         }
-        this.loanService.addLoan(this.username, newLoan);
-        this.personNameField.setText("");
-        this.totalAmountField.setText("");
-        this.paidAmountField.setText("0.0");
-        this.dueDateField.setText(LocalDate.now().plusMonths(1L).toString());
-        this.interestRateField.setText("0.0");
-        this.emiField.setText("0.0");
-        this.noteField.setText("");
-        this.previewLabel.setText("Enter Principal and Interest details for preview.");
-        this.refreshData();
-        JOptionPane.showMessageDialog(this, "Fintech Loan added successfully!", "Success", 1);
+        
+        javax.swing.SwingWorker<Void, Void> worker = new javax.swing.SwingWorker<>() {
+            @Override
+            protected Void doInBackground() {
+                loanService.addLoan(username, newLoan);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                personNameField.setText("");
+                totalAmountField.setText("");
+                paidAmountField.setText("0.0");
+                dueDateField.setText(LocalDate.now().plusMonths(1L).toString());
+                interestRateField.setText("0.0");
+                emiField.setText("0.0");
+                noteField.setText("");
+                previewLabel.setText("Enter Principal and Interest details for preview.");
+                refreshData();
+                JOptionPane.showMessageDialog(LoanPanel.this, "Fintech Loan added successfully!", "Success", 1);
+            }
+        };
+        worker.execute();
     }
 
     private void addPayment() {
@@ -787,9 +814,21 @@ implements Scrollable {
                     return;
                 }
             }
-            this.loanService.updateLoanPayment(this.username, loanId, paymentVal);
-            this.refreshData();
-            JOptionPane.showMessageDialog(this, "Payment recorded in history ledger successfully!", "Success", 1);
+            final double finalPaymentVal = paymentVal;
+            javax.swing.SwingWorker<Void, Void> worker = new javax.swing.SwingWorker<>() {
+                @Override
+                protected Void doInBackground() {
+                    loanService.updateLoanPayment(username, loanId, finalPaymentVal);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    refreshData();
+                    JOptionPane.showMessageDialog(LoanPanel.this, "Payment recorded in history ledger successfully!", "Success", 1);
+                }
+            };
+            worker.execute();
         }
         catch (NumberFormatException e) {
             JOptionPane.showMessageDialog(this, "Please enter a valid numeric value.", "Error", 0);
@@ -818,9 +857,20 @@ implements Scrollable {
         }
         int confirm = JOptionPane.showConfirmDialog(this, "Are you sure you want to mark the loan for " + loan.getPersonName() + " as fully paid/settled?", "Confirm Mark as Paid", 0);
         if (confirm == 0) {
-            this.loanService.markAsPaid(this.username, loanId);
-            this.refreshData();
-            JOptionPane.showMessageDialog(this, "Loan marked as fully settled.", "Success", 1);
+            javax.swing.SwingWorker<Void, Void> worker = new javax.swing.SwingWorker<>() {
+                @Override
+                protected Void doInBackground() {
+                    loanService.markAsPaid(username, loanId);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    refreshData();
+                    JOptionPane.showMessageDialog(LoanPanel.this, "Loan marked as fully settled.", "Success", 1);
+                }
+            };
+            worker.execute();
         }
     }
 
@@ -884,9 +934,20 @@ implements Scrollable {
         String person = this.tableModel.getValueAt(selectedRow, 1).toString();
         int confirm = JOptionPane.showConfirmDialog(this, "Warning: Are you sure you want to delete the loan record for " + person + "?", "Confirm Delete", 0, 2);
         if (confirm == 0) {
-            this.loanService.deleteLoan(this.username, loanId);
-            this.refreshData();
-            JOptionPane.showMessageDialog(this, "Loan record deleted successfully.", "Success", 1);
+            javax.swing.SwingWorker<Void, Void> worker = new javax.swing.SwingWorker<>() {
+                @Override
+                protected Void doInBackground() {
+                    loanService.deleteLoan(username, loanId);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    refreshData();
+                    JOptionPane.showMessageDialog(LoanPanel.this, "Loan record deleted successfully.", "Success", 1);
+                }
+            };
+            worker.execute();
         }
     }
 

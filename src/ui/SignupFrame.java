@@ -74,7 +74,7 @@ public class SignupFrame extends JFrame {
          */
         createButton.addActionListener(e -> {
 
-            String username = usernameField.getText().trim();
+            String username = util.CSVUtil.sanitize(usernameField.getText());
             String password = new String(passwordField.getPassword());
             String confirmPassword = new String(confirmPasswordField.getPassword());
 

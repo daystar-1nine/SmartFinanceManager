@@ -241,10 +241,22 @@ implements Scrollable {
                 maxId = t.getId();
             }
             Transaction newTx = new Transaction(maxId + 1, this.typeBox.getSelectedItem().toString(), amount, this.categoryBox.getSelectedItem().toString(), "Quick Add", LocalDate.now());
-            this.transactionService.addTransaction(this.username, newTx);
-            this.amountField.setText("");
-            this.refreshDashboard();
-            JOptionPane.showMessageDialog(this, "Transaction added successfully!", "Success", 1);
+            
+            javax.swing.SwingWorker<Void, Void> worker = new javax.swing.SwingWorker<>() {
+                @Override
+                protected Void doInBackground() {
+                    transactionService.addTransaction(username, newTx);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    amountField.setText("");
+                    refreshDashboard();
+                    JOptionPane.showMessageDialog(DashboardPanel.this, "Transaction added successfully!", "Success", 1);
+                }
+            };
+            worker.execute();
         }
         catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Please enter a valid amount", "Error", 0);
@@ -252,85 +264,111 @@ implements Scrollable {
     }
 
     private void refreshDashboard() {
-        this.allTransactions = this.transactionService.loadTransactions(this.username);
-        double income = 0.0;
-        double expense = 0.0;
-        for (Transaction t : this.allTransactions) {
-            if ("Income".equalsIgnoreCase(t.getType())) {
-                income += t.getAmount();
-                continue;
+        javax.swing.SwingWorker<Map<String, Object>, Void> worker = new javax.swing.SwingWorker<>() {
+            @Override
+            protected Map<String, Object> doInBackground() {
+                List<Transaction> transactions = transactionService.loadTransactions(username);
+                LoanService loanService = new LoanService();
+                List<Loan> loans = loanService.loadLoans(username);
+                
+                java.util.HashMap<String, Object> map = new java.util.HashMap<>();
+                map.put("transactions", transactions);
+                map.put("loans", loans);
+                return map;
             }
-            expense += t.getAmount();
-        }
-        double balance = income - expense;
-        LoanService loanService = new LoanService();
-        List<Loan> loans = loanService.loadLoans(this.username);
-        double netPendingLoans = 0.0;
-        for (Loan l : loans) {
-            if (!"Active".equalsIgnoreCase(l.getStatus())) continue;
-            double remaining = l.getRemainingAmount();
-            if ("Given".equalsIgnoreCase(l.getType())) {
-                netPendingLoans += remaining;
-                continue;
+
+            @Override
+            protected void done() {
+                try {
+                    Map<String, Object> map = get();
+                    @SuppressWarnings("unchecked")
+                    List<Transaction> transactions = (List<Transaction>) map.get("transactions");
+                    @SuppressWarnings("unchecked")
+                    List<Loan> loans = (List<Loan>) map.get("loans");
+                    
+                    allTransactions = transactions;
+                    double income = 0.0;
+                    double expense = 0.0;
+                    for (Transaction t : allTransactions) {
+                        if ("Income".equalsIgnoreCase(t.getType())) {
+                            income += t.getAmount();
+                            continue;
+                        }
+                        expense += t.getAmount();
+                    }
+                    double balance = income - expense;
+                    double netPendingLoans = 0.0;
+                    for (Loan l : loans) {
+                        if (!"Active".equalsIgnoreCase(l.getStatus())) continue;
+                        double remaining = l.getRemainingAmount();
+                        if ("Given".equalsIgnoreCase(l.getType())) {
+                            netPendingLoans += remaining;
+                            continue;
+                        }
+                        netPendingLoans -= remaining;
+                    }
+                    incomeLabel.setText(String.format("Income: \u20b9%,.2f", income));
+                    expenseLabel.setText(String.format("Expense: \u20b9%,.2f", expense));
+                    balanceLabel.setText(String.format("Balance: \u20b9%,.2f", balance));
+                    if (netPendingLoans >= 0.0) {
+                        loansLabel.setText(String.format("Loans: +\u20b9%,.2f", netPendingLoans));
+                    } else {
+                        loansLabel.setText(String.format("Loans: -\u20b9%,.2f", Math.abs(netPendingLoans)));
+                    }
+                    boolean dark = ThemeUtil.isDarkMode();
+                    Color loansColor = dark ? new Color(179, 157, 219) : new Color(103, 58, 183);
+                    Color loansBorder = dark ? new Color(75, 60, 110) : new Color(209, 196, 233);
+                    loansLabel.setForeground(loansColor);
+                    loansLabel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(loansBorder, 2, true), BorderFactory.createEmptyBorder(15, 10, 15, 10)));
+                    int score = 100;
+                    if (income == 0.0) {
+                        scoreBar.setValue(0);
+                        scoreLabel.setText("Score: 0/100");
+                        statusLabel.setText("Status: No Income");
+                    } else {
+                        double savingsPercent = balance / income * 100.0;
+                        if (savingsPercent < 10.0) {
+                            score -= 30;
+                        } else if (savingsPercent < 20.0) {
+                            score -= 20;
+                        }
+                        score = Math.max(score, 0);
+                        scoreBar.setValue(score);
+                        scoreLabel.setText("Score: " + score + "/100");
+                        String statusWord = savingsPercent >= 40.0 ? "Excellent" : (savingsPercent >= 20.0 ? "Good" : "Poor");
+                        statusLabel.setText("Status: " + statusWord);
+                    }
+                    tableModel.setRowCount(0);
+                    int startIndex = Math.max(0, allTransactions.size() - 5);
+                    for (int i = allTransactions.size() - 1; i >= startIndex; --i) {
+                        Transaction t = allTransactions.get(i);
+                        tableModel.addRow(new Object[]{t.getType(), String.format("\u20b9%,.2f", t.getAmount()), t.getCategory(), t.getDate()});
+                    }
+                    Map<String, Double> spentMap = budgetService.calculateCategoryExpenses(allTransactions);
+                    StringBuilder alerts = new StringBuilder();
+                    for (String category : spentMap.keySet()) {
+                        double spent = spentMap.get(category).doubleValue();
+                        String alert = budgetService.getBudgetAlert(category, spent);
+                        if (alert == null) continue;
+                        alerts.append(alert).append("\n");
+                    }
+                    String insights = insightService.generateInsights(allTransactions);
+                    insightArea.setText(insights);
+                    StringBuilder notificationContent = new StringBuilder();
+                    if (alerts.length() > 0) {
+                        notificationContent.append("--- BUDGET ALERTS ---\n").append((CharSequence)alerts).append("\n");
+                        notificationArea.setForeground(new Color(198, 40, 40));
+                    } else {
+                        notificationArea.setForeground(new Color(60, 60, 60));
+                    }
+                    notificationContent.append("--- SMART INSIGHTS ---\n").append(insights);
+                    notificationArea.setText(notificationContent.toString());
+                } catch (Exception e) {
+                    System.out.println("Error loading dashboard data: " + e.getMessage());
+                }
             }
-            netPendingLoans -= remaining;
-        }
-        this.incomeLabel.setText(String.format("Income: \u20b9%,.2f", income));
-        this.expenseLabel.setText(String.format("Expense: \u20b9%,.2f", expense));
-        this.balanceLabel.setText(String.format("Balance: \u20b9%,.2f", balance));
-        if (netPendingLoans >= 0.0) {
-            this.loansLabel.setText(String.format("Loans: +\u20b9%,.2f", netPendingLoans));
-        } else {
-            this.loansLabel.setText(String.format("Loans: -\u20b9%,.2f", Math.abs(netPendingLoans)));
-        }
-        boolean dark = ThemeUtil.isDarkMode();
-        Color loansColor = dark ? new Color(179, 157, 219) : new Color(103, 58, 183);
-        Color loansBorder = dark ? new Color(75, 60, 110) : new Color(209, 196, 233);
-        this.loansLabel.setForeground(loansColor);
-        this.loansLabel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(loansBorder, 2, true), BorderFactory.createEmptyBorder(15, 10, 15, 10)));
-        int score = 100;
-        if (income == 0.0) {
-            this.scoreBar.setValue(0);
-            this.scoreLabel.setText("Score: 0/100");
-            this.statusLabel.setText("Status: No Income");
-        } else {
-            double savingsPercent = balance / income * 100.0;
-            if (savingsPercent < 10.0) {
-                score -= 30;
-            } else if (savingsPercent < 20.0) {
-                score -= 20;
-            }
-            score = Math.max(score, 0);
-            this.scoreBar.setValue(score);
-            this.scoreLabel.setText("Score: " + score + "/100");
-            String statusWord = savingsPercent >= 40.0 ? "Excellent" : (savingsPercent >= 20.0 ? "Good" : "Poor");
-            this.statusLabel.setText("Status: " + statusWord);
-        }
-        this.tableModel.setRowCount(0);
-        int startIndex = Math.max(0, this.allTransactions.size() - 5);
-        for (int i = this.allTransactions.size() - 1; i >= startIndex; --i) {
-            Transaction t = this.allTransactions.get(i);
-            this.tableModel.addRow(new Object[]{t.getType(), String.format("\u20b9%,.2f", t.getAmount()), t.getCategory(), t.getDate()});
-        }
-        Map<String, Double> spentMap = this.budgetService.calculateCategoryExpenses(this.allTransactions);
-        StringBuilder alerts = new StringBuilder();
-        for (String category : spentMap.keySet()) {
-            double spent;
-            String alert = this.budgetService.getBudgetAlert(category, spent = spentMap.get(category).doubleValue());
-            if (alert == null) continue;
-            alerts.append(alert).append("\n");
-        }
-        String insights = this.insightService.generateInsights(this.allTransactions);
-        this.insightArea.setText(insights);
-        StringBuilder notificationContent = new StringBuilder();
-        if (alerts.length() > 0) {
-            notificationContent.append("--- BUDGET ALERTS ---\n").append((CharSequence)alerts).append("\n");
-            this.notificationArea.setForeground(new Color(198, 40, 40));
-        } else {
-            this.notificationArea.setForeground(new Color(60, 60, 60));
-        }
-        notificationContent.append("--- SMART INSIGHTS ---\n").append(insights);
-        this.notificationArea.setText(notificationContent.toString());
+        };
+        worker.execute();
     }
 
     @Override

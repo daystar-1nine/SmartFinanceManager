@@ -18,6 +18,7 @@ import service.InsightService;
 import util.ThemeUtil;
 import util.Constants;
 import util.AlertUtil;
+import util.CSVUtil;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
@@ -303,7 +304,7 @@ public class TransactionPanel extends JPanel implements Scrollable {
 
             String txType = typeBox.getSelectedIndex() == 0 ? "Income" : "Expense";
             String txCategory = Constants.CATEGORIES[categoryBox.getSelectedIndex()];
-            String note = noteField.getText().replace(",", ";").trim();
+            String note = CSVUtil.sanitize(noteField.getText());
 
             Transaction t = new Transaction(
                     transactionId++,
@@ -314,19 +315,22 @@ public class TransactionPanel extends JPanel implements Scrollable {
                     LocalDate.now()
             );
 
-            allTransactions.add(t);
-            
-            SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            SwingWorker<List<Transaction>, Void> worker = new SwingWorker<>() {
                 @Override
-                protected Void doInBackground() {
-                    transactionService.saveAllTransactions(username, allTransactions);
-                    return null;
+                protected List<Transaction> doInBackground() {
+                    transactionService.addTransaction(username, t);
+                    return transactionService.loadTransactions(username);
                 }
 
                 @Override
                 protected void done() {
-                    refreshTable(allTransactions);
-                    clearFields();
+                    try {
+                        allTransactions = get();
+                        refreshTable(allTransactions);
+                        clearFields();
+                    } catch (Exception e) {
+                        AlertUtil.showError(TransactionPanel.this, "Error adding transaction: " + e.getMessage(), "Error");
+                    }
                 }
             };
             worker.execute();
@@ -350,35 +354,45 @@ public class TransactionPanel extends JPanel implements Scrollable {
                 AlertUtil.showError(this, "Amount must be a positive value", "Error");
                 return;
             }
-            String note = noteField.getText().replace(",", ";").trim();
+            String note = CSVUtil.sanitize(noteField.getText());
 
-            for(int i=0;i<allTransactions.size();i++){
-                if(allTransactions.get(i).getId()==id){
-                    LocalDate originalDate = allTransactions.get(i).getDate();
-                    String txType = typeBox.getSelectedIndex() == 0 ? "Income" : "Expense";
-                    String txCategory = Constants.CATEGORIES[categoryBox.getSelectedIndex()];
-                    allTransactions.set(i, new Transaction(
-                            id,
-                            txType,
-                            amount,
-                            txCategory,
-                            note,
-                            originalDate
-                    ));
+            LocalDate originalDate = null;
+            for (Transaction t : allTransactions) {
+                if (t.getId() == id) {
+                    originalDate = t.getDate();
                     break;
                 }
             }
+            if (originalDate == null) {
+                originalDate = LocalDate.now();
+            }
 
-            SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            String txType = typeBox.getSelectedIndex() == 0 ? "Income" : "Expense";
+            String txCategory = Constants.CATEGORIES[categoryBox.getSelectedIndex()];
+            Transaction updated = new Transaction(
+                    id,
+                    txType,
+                    amount,
+                    txCategory,
+                    note,
+                    originalDate
+            );
+
+            SwingWorker<List<Transaction>, Void> worker = new SwingWorker<>() {
                 @Override
-                protected Void doInBackground() {
-                    transactionService.saveAllTransactions(username, allTransactions);
-                    return null;
+                protected List<Transaction> doInBackground() {
+                    transactionService.updateTransaction(username, updated);
+                    return transactionService.loadTransactions(username);
                 }
 
                 @Override
                 protected void done() {
-                    refreshTable(allTransactions);
+                    try {
+                        allTransactions = get();
+                        refreshTable(allTransactions);
+                    } catch (Exception e) {
+                        AlertUtil.showError(TransactionPanel.this, "Error updating transaction: " + e.getMessage(), "Error");
+                    }
                 }
             };
             worker.execute();
@@ -395,42 +409,65 @@ public class TransactionPanel extends JPanel implements Scrollable {
 
         int id = Integer.parseInt(tableModel.getValueAt(row,0).toString());
 
-        for(int i=0;i<allTransactions.size();i++){
-            if(allTransactions.get(i).getId()==id){
-                lastDeletedTransaction = allTransactions.get(i);
-                lastDeletedIndex = i;
-                allTransactions.remove(i);
+        Transaction toDelete = null;
+        for (Transaction t : allTransactions) {
+            if (t.getId() == id) {
+                toDelete = t;
                 break;
             }
         }
+        if (toDelete == null) return;
+        final Transaction finalToDelete = toDelete;
 
-        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+        SwingWorker<List<Transaction>, Void> worker = new SwingWorker<>() {
             @Override
-            protected Void doInBackground() {
-                transactionService.saveAllTransactions(username, allTransactions);
-                return null;
+            protected List<Transaction> doInBackground() {
+                transactionService.deleteTransaction(username, id);
+                return transactionService.loadTransactions(username);
             }
 
             @Override
             protected void done() {
-                refreshTable(allTransactions);
+                try {
+                    allTransactions = get();
+                    refreshTable(allTransactions);
 
-                int undo = JOptionPane.showConfirmDialog(TransactionPanel.this, "Undo delete?");
-                if(undo == 0){
-                    allTransactions.add(lastDeletedIndex, lastDeletedTransaction);
-                    SwingWorker<Void, Void> undoWorker = new SwingWorker<>() {
-                        @Override
-                        protected Void doInBackground() {
-                            transactionService.saveAllTransactions(username, allTransactions);
-                            return null;
-                        }
+                    int undo = JOptionPane.showConfirmDialog(TransactionPanel.this, "Undo delete?");
+                    if (undo == 0) {
+                        SwingWorker<List<Transaction>, Void> undoWorker = new SwingWorker<>() {
+                            @Override
+                            protected List<Transaction> doInBackground() {
+                                transactionService.addTransaction(username, finalToDelete);
+                                return transactionService.loadTransactions(username);
+                            }
 
-                        @Override
-                        protected void done() {
-                            refreshTable(allTransactions);
-                        }
-                    };
-                    undoWorker.execute();
+                            @Override
+                            protected void done() {
+                                try {
+                                    allTransactions = get();
+                                    allTransactions.sort((a, b) -> Integer.compare(a.getId(), b.getId()));
+                                    SwingWorker<Void, Void> saveWorker = new SwingWorker<>() {
+                                        @Override
+                                        protected Void doInBackground() {
+                                            transactionService.saveAllTransactions(username, allTransactions);
+                                            return null;
+                                        }
+
+                                        @Override
+                                        protected void done() {
+                                            refreshTable(allTransactions);
+                                        }
+                                    };
+                                    saveWorker.execute();
+                                } catch (Exception e) {
+                                    AlertUtil.showError(TransactionPanel.this, "Error restoring transaction: " + e.getMessage(), "Error");
+                                }
+                            }
+                        };
+                        undoWorker.execute();
+                    }
+                } catch (Exception e) {
+                    AlertUtil.showError(TransactionPanel.this, "Error deleting transaction: " + e.getMessage(), "Error");
                 }
             }
         };

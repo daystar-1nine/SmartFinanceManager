@@ -140,4 +140,23 @@ public class TransactionService implements TransactionDAO {
             }
         }
     }
+
+    @Override
+    public void deleteTransaction(String username, int txId) {
+        List<Transaction> list = loadTransactions(username);
+        list.removeIf(t -> t.getId() == txId);
+        saveAllTransactions(username, list);
+    }
+
+    @Override
+    public void updateTransaction(String username, Transaction updatedTx) {
+        List<Transaction> list = loadTransactions(username);
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).getId() == updatedTx.getId()) {
+                list.set(i, updatedTx);
+                break;
+            }
+        }
+        saveAllTransactions(username, list);
+    }
 }
