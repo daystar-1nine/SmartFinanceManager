@@ -169,13 +169,12 @@ public class AboutPanel extends JPanel {
         JLabel nameLabel = new JLabel(member.name);
         nameLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
         
-        JPanel rolesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        JPanel rolesPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 4));
         rolesPanel.setOpaque(false);
-        rolesPanel.setBorder(BorderFactory.createEmptyBorder(0, -8, 0, 0)); // Offset the FlowLayout default margin
         
         for (String role : member.roles) {
-            Color bg = getRoleColor(role);
-            rolesPanel.add(createTag(role, bg, Color.WHITE));
+            Color color = getRoleColor(role);
+            rolesPanel.add(createTag(role, null, color));
         }
 
         // Description (center)
@@ -191,6 +190,10 @@ public class AboutPanel extends JPanel {
         btnPanel.add(gitBtn);
         btnPanel.add(linkedInBtn);
         
+        // Center alignment for BoxLayout
+        nameLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        rolesPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
         // Assemble vertically
         JPanel top = new JPanel();
         top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
@@ -232,24 +235,53 @@ public class AboutPanel extends JPanel {
     private static class RoundedLabel extends JLabel {
         private final int radius;
         private final Color bgColor;
+        private final Color baseFgColor;
 
         public RoundedLabel(String text, int radius, Color bgColor, Color fgColor) {
             super(text);
             this.radius = radius;
             this.bgColor = bgColor;
-            setForeground(fgColor);
+            this.baseFgColor = fgColor;
             setOpaque(false);
-            setFont(new Font("SansSerif", Font.BOLD, 10));
-            setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+            setFont(new Font("SansSerif", Font.BOLD, 12));
+            setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        }
+
+        @Override
+        public Color getForeground() {
+            if (baseFgColor == null) return super.getForeground();
+            if (util.ThemeUtil.isDarkMode()) {
+                return getDarkColor(baseFgColor);
+            } else {
+                return baseFgColor;
+            }
+        }
+
+        private Color getDarkColor(Color lightColor) {
+            int rgb = lightColor.getRGB() & 0xFFFFFF;
+            if (rgb == 0x7B1FA2) { // Purple
+                return new Color(206, 147, 216); // Light Purple (#CE93D8)
+            } else if (rgb == 0x1976D2) { // Blue
+                return new Color(144, 202, 249); // Light Blue (#90CAF9)
+            } else if (rgb == 0x2E7D32) { // Green
+                return new Color(165, 214, 167); // Light Green (#A5D6A7)
+            } else if (rgb == 0xEF6C00) { // Orange
+                return new Color(255, 204, 128); // Light Orange (#FFCC80)
+            } else if (rgb == 0x424242) { // Dark Gray
+                return new Color(200, 200, 200); // Light Gray
+            }
+            return lightColor;
         }
 
         @Override
         protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(bgColor);
-            g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, radius, radius);
-            g2.dispose();
+            if (bgColor != null) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(bgColor);
+                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, radius, radius);
+                g2.dispose();
+            }
             super.paintComponent(g);
         }
     }
