@@ -1,6 +1,3 @@
-/*
- * Decompiled with CFR 0.152.
- */
 package ui;
 
 import java.awt.BorderLayout;
@@ -9,16 +6,22 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import javax.swing.BorderFactory;
+import javax.swing.JFrame;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -31,29 +34,33 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JViewport;
 import javax.swing.Scrollable;
+import javax.swing.SwingUtilities;
+import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
 import model.Loan;
 import model.Transaction;
 import service.BudgetService;
 import service.InsightService;
 import service.LoanService;
 import service.TransactionService;
-
 import util.Constants;
-
 import util.ThemeUtil;
 
 @SuppressWarnings({"serial", "this-escape"})
-public class DashboardPanel
-extends JPanel
-implements Scrollable {
+public class DashboardPanel extends JPanel implements Scrollable {
+
     private final TransactionService transactionService;
     private final BudgetService budgetService;
     private final InsightService insightService;
     private final String username;
-    private List<Transaction> allTransactions = new ArrayList<Transaction>();
+    
+    private List<Transaction> allTransactions = new ArrayList<>();
+    
+    // Original summary labels mapped to cards
     private JLabel incomeLabel;
     private JLabel expenseLabel;
     private JLabel balanceLabel;
@@ -61,6 +68,7 @@ implements Scrollable {
     private JLabel scoreLabel;
     private JLabel statusLabel;
     private JProgressBar scoreBar;
+    
     private JTextField amountField;
     private JComboBox<String> typeBox;
     private JComboBox<String> categoryBox;
@@ -68,164 +76,339 @@ implements Scrollable {
     private DefaultTableModel tableModel;
     private JTextArea notificationArea;
     private JTextArea insightArea;
+    
     private JPanel scorePanel;
-    private JPanel quickAddPanel;
+    private RoundedCardPanel quickAddPanel;
     private JPanel recentTablePanel;
     private JPanel notificationsPanel;
     private JPanel insightsPanel;
+    
     private JLabel amountLabel;
     private JLabel typeLabel;
     private JLabel categoryLabel;
     private JButton quickAddBtn;
+
+    // Redesign Fields
+    private SummaryCard incomeCard;
+    private SummaryCard expenseCard;
+    private SummaryCard balanceCard;
+    private SummaryCard scoreCard;
+    private JScrollPane tableScrollPane;
+    private JPanel emptyStatePanel;
+    private int hoveredRow = -1;
 
     public DashboardPanel(String username) {
         this.username = username;
         this.transactionService = new TransactionService();
         this.budgetService = new BudgetService(username);
         this.insightService = new InsightService();
-        this.setLayout(new BorderLayout(15, 15));
-        this.setBorder(new EmptyBorder(15, 15, 15, 15));
-        this.setBackground(Color.WHITE);
-        this.add((Component)this.createSummaryPanel(), "North");
-        JPanel centerContainer = new JPanel(new BorderLayout(10, 10));
-        centerContainer.setBackground(Color.WHITE);
-        centerContainer.add((Component)this.createQuickAddPanel(), "North");
-        centerContainer.add((Component)this.createRecentTablePanel(), "Center");
-        centerContainer.add((Component)this.createInsightsPanel(), "South");
-        this.add((Component)centerContainer, "Center");
-        this.add((Component)this.createNotificationsPanel(), "East");
-        this.refreshDashboard();
+
+        setLayout(new BorderLayout(15, 15));
+        setBorder(new EmptyBorder(15, 15, 15, 15));
+        setBackground(ThemeUtil.getBackgroundColor());
+
+        // NORTH: Welcome Header + Summary Cards
+        add(createSummaryPanel(), BorderLayout.NORTH);
+
+        // CENTER: Main Content (Quick Action Panel + Scrollable JTable)
+        JPanel centerContainer = new JPanel(new BorderLayout(15, 15));
+        centerContainer.setOpaque(false);
+        centerContainer.add(createQuickActionPanel(), BorderLayout.NORTH);
+        centerContainer.add(createTablePanel(), BorderLayout.CENTER);
+        add(centerContainer, BorderLayout.CENTER);
+
+        // EAST: Notice board style notifications panel
+        add(createNotificationsPanel(), BorderLayout.EAST);
+
+        // SOUTH: Natural language insights panel
+        add(createInsightsPanel(), BorderLayout.SOUTH);
+
+        refreshDashboard();
         ThemeUtil.applyTheme(this);
+        updateCardColors();
     }
 
     private JPanel createSummaryPanel() {
-        JPanel summaryPanel = new JPanel(new BorderLayout(10, 10));
-        summaryPanel.setBackground(Color.WHITE);
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setOpaque(false);
+
+        // Personalization Header (Welcome + Theme Toggle)
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setOpaque(false);
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
+
+        JLabel welcomeLabel = new JLabel("Welcome, " + username + " 👋");
+        welcomeLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
+        welcomeLabel.setForeground(ThemeUtil.getTextColor());
+
+        JButton themeToggleBtn = new JButton(ThemeUtil.isDarkMode() ? "☀️ Light Mode" : "🌙 Dark Mode");
+        themeToggleBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        themeToggleBtn.setFocusPainted(false);
+        themeToggleBtn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(ThemeUtil.getBorderColor(), 1, true),
+            BorderFactory.createEmptyBorder(8, 12, 8, 12)
+        ));
+        themeToggleBtn.setBackground(ThemeUtil.isDarkMode() ? new Color(50, 50, 70) : new Color(240, 240, 240));
+        themeToggleBtn.setForeground(ThemeUtil.getTextColor());
+
+        addHoverEffect(themeToggleBtn,
+            ThemeUtil.isDarkMode() ? new Color(50, 50, 70) : new Color(240, 240, 240),
+            ThemeUtil.isDarkMode() ? new Color(70, 70, 90) : new Color(220, 220, 220),
+            ThemeUtil.getTextColor(),
+            ThemeUtil.getTextColor()
+        );
+
+        themeToggleBtn.addActionListener(e -> {
+            ThemeUtil.setDarkMode(!ThemeUtil.isDarkMode());
+            JFrame topFrame = (JFrame) SwingUtilities.getWindowAncestor(this);
+            if (topFrame != null) {
+                ThemeUtil.applyTheme(topFrame);
+                themeToggleBtn.setText(ThemeUtil.isDarkMode() ? "☀️ Light Mode" : "🌙 Dark Mode");
+                themeToggleBtn.setBackground(ThemeUtil.isDarkMode() ? new Color(50, 50, 70) : new Color(240, 240, 240));
+                themeToggleBtn.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(ThemeUtil.getBorderColor(), 1, true),
+                    BorderFactory.createEmptyBorder(8, 12, 8, 12)
+                ));
+                updateCardColors();
+                topFrame.repaint();
+            }
+        });
+
+        headerPanel.add(welcomeLabel, BorderLayout.WEST);
+        headerPanel.add(themeToggleBtn, BorderLayout.EAST);
+
+        // Grid of 4 Cards
         JPanel cardsPanel = new JPanel(new GridLayout(1, 4, 15, 0));
-        cardsPanel.setBackground(Color.WHITE);
-        this.incomeLabel = new JLabel("Income: \u20b90.00", 0);
-        this.incomeLabel.setFont(new Font("SansSerif", 1, 16));
-        this.incomeLabel.setForeground(new Color(46, 125, 50));
-        this.incomeLabel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(200, 230, 201), 2, true), BorderFactory.createEmptyBorder(15, 10, 15, 10)));
-        this.expenseLabel = new JLabel("Expense: \u20b90.00", 0);
-        this.expenseLabel.setFont(new Font("SansSerif", 1, 16));
-        this.expenseLabel.setForeground(new Color(198, 40, 40));
-        this.expenseLabel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(255, 205, 210), 2, true), BorderFactory.createEmptyBorder(15, 10, 15, 10)));
-        this.balanceLabel = new JLabel("Balance: \u20b90.00", 0);
-        this.balanceLabel.setFont(new Font("SansSerif", 1, 16));
-        this.balanceLabel.setForeground(new Color(21, 101, 192));
-        this.balanceLabel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(187, 222, 251), 2, true), BorderFactory.createEmptyBorder(15, 10, 15, 10)));
-        this.loansLabel = new JLabel("Loans: \u20b90.00", 0);
-        this.loansLabel.setName("customColorLabel");
-        this.loansLabel.setFont(new Font("SansSerif", 1, 16));
-        this.loansLabel.setForeground(new Color(103, 58, 183));
-        this.loansLabel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(209, 196, 233), 2, true), BorderFactory.createEmptyBorder(15, 10, 15, 10)));
-        cardsPanel.add(this.incomeLabel);
-        cardsPanel.add(this.expenseLabel);
-        cardsPanel.add(this.balanceLabel);
-        cardsPanel.add(this.loansLabel);
-        this.scorePanel = new JPanel(new BorderLayout(5, 5));
-        this.scorePanel.setBackground(Color.WHITE);
-        this.scorePanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("Financial Health Score"), BorderFactory.createEmptyBorder(5, 10, 10, 10)));
-        this.scoreLabel = new JLabel("Score: 0/100", 2);
-        this.scoreLabel.setFont(new Font("SansSerif", 1, 12));
-        this.statusLabel = new JLabel("Status: -", 4);
-        this.statusLabel.setFont(new Font("SansSerif", 1, 12));
-        JPanel scoreTextPanel = new JPanel(new BorderLayout());
-        scoreTextPanel.setBackground(Color.WHITE);
-        scoreTextPanel.add((Component)this.scoreLabel, "West");
-        scoreTextPanel.add((Component)this.statusLabel, "East");
-        this.scoreBar = new JProgressBar(0, 100);
-        this.scoreBar.setStringPainted(true);
-        this.scoreBar.setFont(new Font("SansSerif", 1, 11));
-        this.scoreBar.setForeground(new Color(77, 182, 172));
-        this.scorePanel.add((Component)scoreTextPanel, "North");
-        this.scorePanel.add((Component)this.scoreBar, "Center");
-        summaryPanel.add((Component)cardsPanel, "Center");
-        summaryPanel.add((Component)this.scorePanel, "South");
-        return summaryPanel;
+        cardsPanel.setOpaque(false);
+
+        incomeCard = new SummaryCard("income");
+        expenseCard = new SummaryCard("expense");
+        balanceCard = new SummaryCard("balance");
+        scoreCard = new SummaryCard("score");
+
+        cardsPanel.add(incomeCard);
+        cardsPanel.add(expenseCard);
+        cardsPanel.add(balanceCard);
+        cardsPanel.add(scoreCard);
+
+        panel.add(headerPanel, BorderLayout.NORTH);
+        panel.add(cardsPanel, BorderLayout.CENTER);
+
+        return panel;
     }
 
-    private JPanel createQuickAddPanel() {
-        this.quickAddPanel = new JPanel(new FlowLayout(0, 10, 5));
-        this.quickAddPanel.setBackground(Color.WHITE);
-        this.quickAddPanel.setBorder(BorderFactory.createTitledBorder("Quick Add Transaction"));
-        this.amountField = new JTextField(8);
-        this.typeBox = new JComboBox<String>(new String[]{"Income", "Expense"});
-        this.categoryBox = new JComboBox<String>(Constants.CATEGORIES);
-        this.quickAddBtn = new JButton("Add");
-        this.quickAddBtn.setFont(new Font("SansSerif", 1, 12));
-        this.quickAddBtn.addActionListener(e -> this.quickAddTransaction());
-        this.amountLabel = new JLabel("Amount" + ":");
-        this.typeLabel = new JLabel("Type" + ":");
-        this.categoryLabel = new JLabel("Category" + ":");
-        this.quickAddPanel.add(this.amountLabel);
-        this.quickAddPanel.add(this.amountField);
-        this.quickAddPanel.add(this.typeLabel);
-        this.quickAddPanel.add(this.typeBox);
-        this.quickAddPanel.add(this.categoryLabel);
-        this.quickAddPanel.add(this.categoryBox);
-        this.quickAddPanel.add(this.quickAddBtn);
-        return this.quickAddPanel;
+    private JPanel createQuickActionPanel() {
+        quickAddPanel = new RoundedCardPanel(12);
+        quickAddPanel.setLayout(new FlowLayout(FlowLayout.LEFT, 15, 10));
+        quickAddPanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        quickAddPanel.setCustomBackground(ThemeUtil.getCardBackgroundColor());
+
+        JLabel title = new JLabel("⚡ Quick Add:");
+        title.setFont(new Font("SansSerif", Font.BOLD, 13));
+        title.setForeground(ThemeUtil.getTextColor());
+        quickAddPanel.add(title);
+
+        amountLabel = new JLabel("Amount (₹):");
+        amountLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        amountField = new JTextField(8);
+        amountField.setFont(new Font("SansSerif", Font.PLAIN, 12));
+
+        typeLabel = new JLabel("Type:");
+        typeLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        typeBox = new JComboBox<>(new String[]{"Income", "Expense"});
+        typeBox.setFont(new Font("SansSerif", Font.PLAIN, 12));
+
+        categoryLabel = new JLabel("Category:");
+        categoryLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        categoryBox = new JComboBox<>(Constants.CATEGORIES);
+        categoryBox.setFont(new Font("SansSerif", Font.PLAIN, 12));
+
+        quickAddBtn = new JButton("Add Transaction");
+        quickAddBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        quickAddBtn.setFocusPainted(false);
+        quickAddBtn.setBackground(ThemeUtil.isDarkMode() ? new Color(50, 50, 70) : new Color(240, 240, 240));
+        quickAddBtn.setForeground(ThemeUtil.getTextColor());
+        quickAddBtn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(ThemeUtil.getBorderColor(), 1, true),
+            BorderFactory.createEmptyBorder(6, 12, 6, 12)
+        ));
+
+        addHoverEffect(quickAddBtn,
+            ThemeUtil.isDarkMode() ? new Color(50, 50, 70) : new Color(240, 240, 240),
+            ThemeUtil.isDarkMode() ? new Color(70, 70, 90) : new Color(220, 220, 220),
+            ThemeUtil.getTextColor(),
+            ThemeUtil.getTextColor()
+        );
+
+        quickAddBtn.addActionListener(e -> quickAddTransaction());
+
+        quickAddPanel.add(amountLabel);
+        quickAddPanel.add(amountField);
+        quickAddPanel.add(typeLabel);
+        quickAddPanel.add(typeBox);
+        quickAddPanel.add(categoryLabel);
+        quickAddPanel.add(categoryBox);
+        quickAddPanel.add(quickAddBtn);
+
+        return quickAddPanel;
     }
 
-    private JPanel createRecentTablePanel() {
-        this.recentTablePanel = new JPanel(new GridBagLayout());
-        this.recentTablePanel.setBackground(Color.WHITE);
-        this.recentTablePanel.setBorder(BorderFactory.createTitledBorder("Recent Transactions"));
-        this.tableModel = new DefaultTableModel(new String[]{"Type", "Amount", "Category", "Date"}, 0){
+    private JPanel createTablePanel() {
+        recentTablePanel = new JPanel(new BorderLayout());
+        recentTablePanel.setOpaque(false);
+
+        tableModel = new DefaultTableModel(new String[]{"Type", "Amount", "Category", "Date"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
             }
         };
-        this.table = new JTable(this.tableModel);
-        this.table.setRowHeight(25);
-        this.table.getTableHeader().setFont(new Font("SansSerif", 1, 12));
-        this.table.setFont(new Font("SansSerif", 0, 12));
-        this.table.getColumnModel().getColumn(0).setPreferredWidth(80);
-        this.table.getColumnModel().getColumn(1).setPreferredWidth(100);
-        this.table.getColumnModel().getColumn(2).setPreferredWidth(100);
-        this.table.getColumnModel().getColumn(3).setPreferredWidth(100);
-        JScrollPane scrollPane = new JScrollPane(this.table);
-        scrollPane.setPreferredSize(new Dimension(500, 150));
+
+        table = new JTable(tableModel) {
+            @Override
+            public Component prepareRenderer(TableCellRenderer renderer, int row, int column) {
+                Component comp = super.prepareRenderer(renderer, row, column);
+                boolean selected = isRowSelected(row);
+                boolean dark = ThemeUtil.isDarkMode();
+
+                if (selected) {
+                    comp.setBackground(dark ? new Color(60, 60, 90) : new Color(187, 222, 251));
+                    comp.setForeground(ThemeUtil.getTextColor());
+                } else if (row == hoveredRow) {
+                    comp.setBackground(dark ? new Color(50, 50, 70) : new Color(240, 240, 255));
+                    comp.setForeground(ThemeUtil.getTextColor());
+                } else {
+                    try {
+                        String type = getValueAt(row, 0).toString();
+                        if ("Income".equalsIgnoreCase(type)) {
+                            comp.setBackground(dark ? new Color(25, 45, 30) : new Color(230, 245, 230));
+                            comp.setForeground(dark ? new Color(165, 214, 167) : new Color(46, 125, 50));
+                        } else {
+                            comp.setBackground(dark ? new Color(45, 25, 25) : new Color(255, 230, 230));
+                            comp.setForeground(dark ? new Color(239, 154, 154) : new Color(198, 40, 40));
+                        }
+                    } catch (Exception e) {
+                        comp.setBackground(row % 2 == 0 ? ThemeUtil.getCardBackgroundColor() : ThemeUtil.getBackgroundColor());
+                        comp.setForeground(ThemeUtil.getTextColor());
+                    }
+                }
+                return comp;
+            }
+        };
+
+        table.setRowHeight(30);
+        table.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
+        table.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        table.getColumnModel().getColumn(0).setPreferredWidth(80);
+        table.getColumnModel().getColumn(1).setPreferredWidth(100);
+        table.getColumnModel().getColumn(2).setPreferredWidth(100);
+        table.getColumnModel().getColumn(3).setPreferredWidth(100);
+
+        // Center alignment renderer
+        DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+        centerRenderer.setHorizontalAlignment(JLabel.CENTER);
+        for (int i = 0; i < table.getColumnCount(); i++) {
+            table.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
+        }
+
+        // Row Hover Interaction
+        table.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+            @Override
+            public void mouseMoved(java.awt.event.MouseEvent e) {
+                int row = table.rowAtPoint(e.getPoint());
+                if (row != hoveredRow) {
+                    hoveredRow = row;
+                    table.repaint();
+                }
+            }
+        });
+        table.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                hoveredRow = -1;
+                table.repaint();
+            }
+        });
+
+        tableScrollPane = new JScrollPane(table);
+        tableScrollPane.setPreferredSize(new Dimension(500, 160));
+        tableScrollPane.setBorder(BorderFactory.createLineBorder(ThemeUtil.getBorderColor(), 1, true));
+
+        // Setup Empty State Panel
+        emptyStatePanel = new JPanel(new GridBagLayout());
+        emptyStatePanel.setOpaque(false);
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
         gbc.gridy = 0;
-        gbc.fill = 0;
-        gbc.anchor = 10;
-        this.recentTablePanel.add((Component)scrollPane, gbc);
-        return this.recentTablePanel;
+        gbc.insets = new Insets(10, 10, 10, 10);
+
+        JLabel emptyIcon = new JLabel("📭");
+        emptyIcon.setFont(new Font("SansSerif", Font.PLAIN, 40));
+        emptyStatePanel.add(emptyIcon, gbc);
+
+        gbc.gridy = 1;
+        JLabel emptyTitle = new JLabel("No transactions yet");
+        emptyTitle.setFont(new Font("SansSerif", Font.BOLD, 14));
+        emptyTitle.setForeground(ThemeUtil.getTextColor());
+        emptyStatePanel.add(emptyTitle, gbc);
+
+        gbc.gridy = 2;
+        JLabel emptyDesc = new JLabel("Start by adding your first entry using the Quick Add form!");
+        emptyDesc.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        emptyDesc.setForeground(ThemeUtil.getSecondaryTextColor());
+        emptyStatePanel.add(emptyDesc, gbc);
+
+        recentTablePanel.add(tableScrollPane, BorderLayout.CENTER);
+        return recentTablePanel;
     }
 
     private JPanel createNotificationsPanel() {
-        this.notificationsPanel = new JPanel(new BorderLayout());
-        this.notificationsPanel.setPreferredSize(new Dimension(260, 0));
-        this.notificationsPanel.setBorder(BorderFactory.createTitledBorder("Notifications"));
-        this.notificationArea = new JTextArea();
-        this.notificationArea.setEditable(false);
-        this.notificationArea.setLineWrap(true);
-        this.notificationArea.setWrapStyleWord(true);
-        this.notificationArea.setFont(new Font("SansSerif", 0, 12));
-        this.notificationArea.setBackground(new Color(250, 250, 250));
-        JScrollPane scroll = new JScrollPane(this.notificationArea);
-        this.notificationsPanel.add((Component)scroll, "Center");
-        return this.notificationsPanel;
+        notificationsPanel = new JPanel(new BorderLayout());
+        notificationsPanel.setPreferredSize(new Dimension(260, 0));
+        notificationsPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(ThemeUtil.getBorderColor(), 1, true),
+            "Notifications",
+            TitledBorder.LEFT,
+            TitledBorder.TOP,
+            new Font("SansSerif", Font.BOLD, 12),
+            ThemeUtil.getTextColor()
+        ));
+
+        notificationArea = new JTextArea();
+        notificationArea.setEditable(false);
+        notificationArea.setLineWrap(true);
+        notificationArea.setWrapStyleWord(true);
+        notificationArea.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        notificationArea.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        JScrollPane scroll = new JScrollPane(notificationArea);
+        scroll.setBorder(null);
+        notificationsPanel.add(scroll, BorderLayout.CENTER);
+        return notificationsPanel;
     }
 
     private JPanel createInsightsPanel() {
-        this.insightsPanel = new JPanel(new BorderLayout());
-        this.insightsPanel.setBackground(Color.WHITE);
-        this.insightsPanel.setBorder(BorderFactory.createTitledBorder("Insights"));
-        this.insightArea = new JTextArea(3, 40);
-        this.insightArea.setEditable(false);
-        this.insightArea.setLineWrap(true);
-        this.insightArea.setWrapStyleWord(true);
-        this.insightArea.setFont(new Font("SansSerif", 0, 12));
-        this.insightArea.setBackground(new Color(245, 247, 250));
-        this.insightArea.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
-        this.insightsPanel.add((Component)new JScrollPane(this.insightArea), "Center");
-        return this.insightsPanel;
+        insightsPanel = new JPanel(new BorderLayout());
+        insightsPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(ThemeUtil.getBorderColor(), 1, true),
+            "Insights & Analytics",
+            TitledBorder.LEFT,
+            TitledBorder.TOP,
+            new Font("SansSerif", Font.BOLD, 12),
+            ThemeUtil.getTextColor()
+        ));
+
+        insightArea = new JTextArea(3, 40);
+        insightArea.setEditable(false);
+        insightArea.setLineWrap(true);
+        insightArea.setWrapStyleWord(true);
+        insightArea.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        insightArea.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        JScrollPane scroll = new JScrollPane(insightArea);
+        scroll.setBorder(null);
+        insightsPanel.add(scroll, BorderLayout.CENTER);
+        return insightsPanel;
     }
 
     private void quickAddTransaction() {
@@ -241,7 +424,7 @@ implements Scrollable {
                 maxId = t.getId();
             }
             Transaction newTx = new Transaction(maxId + 1, this.typeBox.getSelectedItem().toString(), amount, this.categoryBox.getSelectedItem().toString(), "Quick Add", LocalDate.now());
-            
+
             javax.swing.SwingWorker<Void, Void> worker = new javax.swing.SwingWorker<>() {
                 @Override
                 protected Void doInBackground() {
@@ -270,7 +453,7 @@ implements Scrollable {
                 List<Transaction> transactions = transactionService.loadTransactions(username);
                 LoanService loanService = new LoanService();
                 List<Loan> loans = loanService.loadLoans(username);
-                
+
                 java.util.HashMap<String, Object> map = new java.util.HashMap<>();
                 map.put("transactions", transactions);
                 map.put("loans", loans);
@@ -285,7 +468,7 @@ implements Scrollable {
                     List<Transaction> transactions = (List<Transaction>) map.get("transactions");
                     @SuppressWarnings("unchecked")
                     List<Loan> loans = (List<Loan>) map.get("loans");
-                    
+
                     allTransactions = transactions;
                     double income = 0.0;
                     double expense = 0.0;
@@ -307,19 +490,18 @@ implements Scrollable {
                         }
                         netPendingLoans -= remaining;
                     }
-                    incomeLabel.setText(String.format("Income: \u20b9%,.2f", income));
-                    expenseLabel.setText(String.format("Expense: \u20b9%,.2f", expense));
-                    balanceLabel.setText(String.format("Balance: \u20b9%,.2f", balance));
-                    if (netPendingLoans >= 0.0) {
-                        loansLabel.setText(String.format("Loans: +\u20b9%,.2f", netPendingLoans));
-                    } else {
-                        loansLabel.setText(String.format("Loans: -\u20b9%,.2f", Math.abs(netPendingLoans)));
+                    incomeLabel.setText(String.format("₹%,.2f", income));
+                    expenseLabel.setText(String.format("₹%,.2f", expense));
+                    balanceLabel.setText(String.format("₹%,.2f", balance));
+                    
+                    if (loansLabel != null) {
+                        if (netPendingLoans >= 0.0) {
+                            loansLabel.setText(String.format("Loans: +₹%,.2f", netPendingLoans));
+                        } else {
+                            loansLabel.setText(String.format("Loans: -₹%,.2f", Math.abs(netPendingLoans)));
+                        }
                     }
-                    boolean dark = ThemeUtil.isDarkMode();
-                    Color loansColor = dark ? new Color(179, 157, 219) : new Color(103, 58, 183);
-                    Color loansBorder = dark ? new Color(75, 60, 110) : new Color(209, 196, 233);
-                    loansLabel.setForeground(loansColor);
-                    loansLabel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(loansBorder, 2, true), BorderFactory.createEmptyBorder(15, 10, 15, 10)));
+
                     int score = 100;
                     if (income == 0.0) {
                         scoreBar.setValue(0);
@@ -338,12 +520,22 @@ implements Scrollable {
                         String statusWord = savingsPercent >= 40.0 ? "Excellent" : (savingsPercent >= 20.0 ? "Good" : "Poor");
                         statusLabel.setText("Status: " + statusWord);
                     }
+
+                    // Populate JTable
                     tableModel.setRowCount(0);
                     int startIndex = Math.max(0, allTransactions.size() - 5);
                     for (int i = allTransactions.size() - 1; i >= startIndex; --i) {
                         Transaction t = allTransactions.get(i);
-                        tableModel.addRow(new Object[]{t.getType(), String.format("\u20b9%,.2f", t.getAmount()), t.getCategory(), t.getDate()});
+                        tableModel.addRow(new Object[]{t.getType(), String.format("₹%,.2f", t.getAmount()), t.getCategory(), t.getDate()});
                     }
+
+                    // Swap Empty State View
+                    if (allTransactions.isEmpty()) {
+                        tableScrollPane.setViewportView(emptyStatePanel);
+                    } else {
+                        tableScrollPane.setViewportView(table);
+                    }
+
                     Map<String, Double> spentMap = budgetService.calculateCategoryExpenses(allTransactions);
                     StringBuilder alerts = new StringBuilder();
                     for (String category : spentMap.keySet()) {
@@ -354,14 +546,15 @@ implements Scrollable {
                     }
                     String insights = insightService.generateInsights(allTransactions);
                     insightArea.setText(insights);
+                    
                     StringBuilder notificationContent = new StringBuilder();
                     if (alerts.length() > 0) {
-                        notificationContent.append("--- BUDGET ALERTS ---\n").append((CharSequence)alerts).append("\n");
+                        notificationContent.append("⚠️ BUDGET ALERTS ⚠️\n").append((CharSequence)alerts).append("\n");
                         notificationArea.setForeground(new Color(198, 40, 40));
                     } else {
-                        notificationArea.setForeground(new Color(60, 60, 60));
+                        notificationArea.setForeground(ThemeUtil.getTextColor());
                     }
-                    notificationContent.append("--- SMART INSIGHTS ---\n").append(insights);
+                    notificationContent.append("💡 SMART INSIGHTS 💡\n").append(insights);
                     notificationArea.setText(notificationContent.toString());
                 } catch (Exception e) {
                     System.out.println("Error loading dashboard data: " + e.getMessage());
@@ -371,6 +564,103 @@ implements Scrollable {
         worker.execute();
     }
 
+    private void updateCardColors() {
+        setBackground(ThemeUtil.getBackgroundColor());
+        if (incomeCard != null) incomeCard.updateColors();
+        if (expenseCard != null) expenseCard.updateColors();
+        if (balanceCard != null) balanceCard.updateColors();
+        if (scoreCard != null) scoreCard.updateColors();
+
+        if (quickAddPanel != null) {
+            quickAddPanel.setBackground(ThemeUtil.getCardBackgroundColor());
+            quickAddPanel.setCustomBackground(ThemeUtil.getCardBackgroundColor());
+            for (Component child : quickAddPanel.getComponents()) {
+                if (child instanceof JLabel) {
+                    child.setForeground(ThemeUtil.getTextColor());
+                }
+            }
+        }
+        if (recentTablePanel != null) {
+            recentTablePanel.setBackground(ThemeUtil.getCardBackgroundColor());
+        }
+        if (emptyStatePanel != null) {
+            for (Component child : emptyStatePanel.getComponents()) {
+                if (child instanceof JLabel) {
+                    JLabel lbl = (JLabel) child;
+                    if (lbl.getFont().isBold()) {
+                        lbl.setForeground(ThemeUtil.getTextColor());
+                    } else {
+                        lbl.setForeground(ThemeUtil.getSecondaryTextColor());
+                    }
+                }
+            }
+        }
+        if (notificationsPanel != null) {
+            notificationsPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(ThemeUtil.getBorderColor(), 1, true),
+                "Notifications",
+                TitledBorder.LEFT,
+                TitledBorder.TOP,
+                new Font("SansSerif", Font.BOLD, 12),
+                ThemeUtil.getTextColor()
+            ));
+        }
+        if (insightsPanel != null) {
+            insightsPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(ThemeUtil.getBorderColor(), 1, true),
+                "Insights & Analytics",
+                TitledBorder.LEFT,
+                TitledBorder.TOP,
+                new Font("SansSerif", Font.BOLD, 12),
+                ThemeUtil.getTextColor()
+            ));
+        }
+        if (tableScrollPane != null) {
+            tableScrollPane.setBorder(BorderFactory.createLineBorder(ThemeUtil.getBorderColor(), 1, true));
+        }
+    }
+
+    private void addHoverEffect(JButton button, Color normalBg, Color hoverBg, Color normalFg, Color hoverFg) {
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                button.setBackground(hoverBg);
+                button.setForeground(hoverFg);
+            }
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                button.setBackground(normalBg);
+                button.setForeground(normalFg);
+            }
+        });
+    }
+
+    private Color getIncomeCardBg() {
+        return ThemeUtil.isDarkMode() ? new Color(27, 62, 37) : new Color(232, 245, 233);
+    }
+    private Color getIncomeCardFg() {
+        return ThemeUtil.isDarkMode() ? new Color(165, 214, 167) : new Color(46, 125, 50);
+    }
+    private Color getExpenseCardBg() {
+        return ThemeUtil.isDarkMode() ? new Color(74, 30, 32) : new Color(255, 235, 238);
+    }
+    private Color getExpenseCardFg() {
+        return ThemeUtil.isDarkMode() ? new Color(239, 154, 154) : new Color(198, 40, 40);
+    }
+    private Color getBalanceCardBg() {
+        return ThemeUtil.isDarkMode() ? new Color(24, 53, 92) : new Color(227, 242, 253);
+    }
+    private Color getBalanceCardFg() {
+        return ThemeUtil.isDarkMode() ? new Color(144, 202, 249) : new Color(21, 101, 192);
+    }
+    private Color getScoreCardBg() {
+        return ThemeUtil.isDarkMode() ? new Color(56, 31, 71) : new Color(243, 229, 245);
+    }
+    private Color getScoreCardFg() {
+        return ThemeUtil.isDarkMode() ? new Color(206, 147, 216) : new Color(106, 27, 154);
+    }
+
+    // ---------- JTABLE SCROLLABLE INTERFACE ----------
     @Override
     public Dimension getPreferredScrollableViewportSize() {
         return this.getPreferredSize();
@@ -400,5 +690,157 @@ implements Scrollable {
             return this.getParent().getHeight() > this.getPreferredSize().height;
         }
         return false;
+    }
+
+    // ---------- HELPER CLASS FOR SOLID ROUNDED JPANEL ----------
+    private static class RoundedCardPanel extends JPanel {
+        private final int radius;
+        private Color customBgColor;
+
+        public RoundedCardPanel(int radius) {
+            this.radius = radius;
+            setOpaque(false);
+        }
+
+        public void setCustomBackground(Color color) {
+            this.customBgColor = color;
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(customBgColor != null ? customBgColor : getBackground());
+            g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, radius, radius);
+            g2.dispose();
+        }
+    }
+
+    // ---------- SUMMARY CARD INNER CLASS ----------
+    private class SummaryCard extends RoundedCardPanel {
+        private final String type;
+        private JLabel cardIcon;
+        private JLabel cardTitleLabel;
+        private JLabel cardValueLabel;
+        private JLabel cardSubLabel; 
+        private JPanel innerScorePanel; 
+
+        public SummaryCard(String type) {
+            super(16);
+            this.type = type;
+
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+            setBorder(BorderFactory.createEmptyBorder(12, 15, 12, 15));
+
+            cardIcon = new JLabel();
+            cardIcon.setFont(new Font("SansSerif", Font.PLAIN, 22));
+            cardIcon.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+            cardTitleLabel = new JLabel();
+            cardTitleLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
+            cardTitleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+            cardValueLabel = new JLabel();
+            cardValueLabel.setFont(new Font("SansSerif", Font.BOLD, 18));
+            cardValueLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+            add(cardIcon);
+            add(Box.createVerticalStrut(4));
+            add(cardTitleLabel);
+            add(Box.createVerticalStrut(4));
+
+            if ("income".equals(type)) {
+                cardIcon.setText("📥");
+                cardTitleLabel.setText("Total Income");
+                incomeLabel = cardValueLabel;
+                add(cardValueLabel);
+            } else if ("expense".equals(type)) {
+                cardIcon.setText("📤");
+                cardTitleLabel.setText("Total Expense");
+                expenseLabel = cardValueLabel;
+                add(cardValueLabel);
+            } else if ("balance".equals(type)) {
+                cardIcon.setText("💰");
+                cardTitleLabel.setText("Net Balance");
+                balanceLabel = cardValueLabel;
+                add(cardValueLabel);
+
+                cardSubLabel = new JLabel("Loans: ₹0.00");
+                cardSubLabel.setFont(new Font("SansSerif", Font.PLAIN, 10));
+                cardSubLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+                loansLabel = cardSubLabel;
+                add(Box.createVerticalStrut(4));
+                add(cardSubLabel);
+            } else if ("score".equals(type)) {
+                cardIcon.setText("🛡️");
+                cardTitleLabel.setText("Health Score");
+
+                innerScorePanel = new JPanel(new BorderLayout());
+                innerScorePanel.setOpaque(false);
+                innerScorePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+                scoreLabel = new JLabel("Score: 0/100");
+                scoreLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+                scoreLabel.setName("customColorLabel");
+
+                statusLabel = new JLabel("Status: -");
+                statusLabel.setFont(new Font("SansSerif", Font.BOLD, 11));
+                statusLabel.setName("customColorLabel");
+
+                innerScorePanel.add(scoreLabel, BorderLayout.WEST);
+                innerScorePanel.add(statusLabel, BorderLayout.EAST);
+
+                scoreBar = new JProgressBar(0, 100);
+                scoreBar.setStringPainted(true);
+                scoreBar.setFont(new Font("SansSerif", Font.BOLD, 9));
+                scoreBar.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+                add(innerScorePanel);
+                add(Box.createVerticalStrut(6));
+                add(scoreBar);
+            }
+
+            updateColors();
+        }
+
+        public void updateColors() {
+            Color bg, fg;
+            switch (type) {
+                case "income":
+                    bg = getIncomeCardBg();
+                    fg = getIncomeCardFg();
+                    break;
+                case "expense":
+                    bg = getExpenseCardBg();
+                    fg = getExpenseCardFg();
+                    break;
+                case "balance":
+                    bg = getBalanceCardBg();
+                    fg = getBalanceCardFg();
+                    break;
+                case "score":
+                    bg = getScoreCardBg();
+                    fg = getScoreCardFg();
+                    break;
+                default:
+                    bg = ThemeUtil.getCardBackgroundColor();
+                    fg = ThemeUtil.getTextColor();
+            }
+            setCustomBackground(bg);
+
+            cardIcon.setForeground(fg);
+            cardTitleLabel.setForeground(ThemeUtil.isDarkMode() ? ThemeUtil.DARK_SECONDARY_TEXT : ThemeUtil.LIGHT_SECONDARY_TEXT);
+            cardValueLabel.setForeground(fg);
+
+            if (cardSubLabel != null) {
+                cardSubLabel.setForeground(fg);
+            }
+            if (innerScorePanel != null) {
+                scoreLabel.setForeground(fg);
+                statusLabel.setForeground(fg);
+            }
+        }
     }
 }
