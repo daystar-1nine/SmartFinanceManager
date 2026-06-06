@@ -9,6 +9,7 @@ import java.awt.*;
  * Main application screen after login.
  * Handles navigation and dynamic panel switching.
  */
+@SuppressWarnings({"serial", "this-escape"})
 public class DashboardFrame extends JFrame {
 
     private JPanel mainPanel;
@@ -73,7 +74,7 @@ public class DashboardFrame extends JFrame {
         reportBtn.addActionListener(e -> switchPanel(new ReportPanel(username)));
         loansBtn.addActionListener(e -> switchPanel(new LoanPanel(username)));
         profileBtn.addActionListener(e -> switchPanel(new ProfilePanel(username)));
-        aboutBtn.addActionListener(e -> switchPanel(createSimplePanel("About Section Coming Soon")));
+        aboutBtn.addActionListener(e -> switchPanel(new AboutPanel()));
 
         setVisible(true);
     }

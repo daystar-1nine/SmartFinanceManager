@@ -8,6 +8,7 @@ import java.awt.*;
  * ------
  * A reusable header panel displaying titles or welcome messages.
  */
+@SuppressWarnings({"serial", "this-escape"})
 public class TopBar extends JPanel {
 
     private JLabel titleLabel;

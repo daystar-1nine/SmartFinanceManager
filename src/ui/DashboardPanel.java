@@ -45,6 +45,7 @@ import util.Constants;
 
 import util.ThemeUtil;
 
+@SuppressWarnings({"serial", "this-escape"})
 public class DashboardPanel
 extends JPanel
 implements Scrollable {
@@ -302,7 +303,7 @@ implements Scrollable {
             score = Math.max(score, 0);
             this.scoreBar.setValue(score);
             this.scoreLabel.setText("Score: " + score + "/100");
-            String statusWord = savingsPercent >= 40.0 ? "status_excellent" : (savingsPercent >= 20.0 ? "status_good" : "status_poor");
+            String statusWord = savingsPercent >= 40.0 ? "Excellent" : (savingsPercent >= 20.0 ? "Good" : "Poor");
             this.statusLabel.setText("Status: " + statusWord);
         }
         this.tableModel.setRowCount(0);

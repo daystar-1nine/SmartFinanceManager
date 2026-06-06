@@ -12,6 +12,7 @@ import java.awt.*;
  * This class represents the user registration screen.
  * It allows new users to create an account.
  */
+@SuppressWarnings({"serial", "this-escape"})
 public class SignupFrame extends JFrame {
 
     private JTextField usernameField;

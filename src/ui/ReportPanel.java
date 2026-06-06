@@ -24,6 +24,7 @@ import java.util.Map;
  * Allows date, type, and category filtering, summary calculations,
  * category breakdowns, and smart rule-based insights.
  */
+@SuppressWarnings({"serial", "this-escape"})
 public class ReportPanel extends JPanel implements Scrollable {
 
     // ================= SERVICES =================

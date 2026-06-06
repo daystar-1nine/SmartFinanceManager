@@ -66,6 +66,7 @@ import org.jfree.data.general.PieDataset;
 import service.LoanService;
 import util.ThemeUtil;
 
+@SuppressWarnings({"serial", "this-escape"})
 public class LoanPanel
 extends JPanel
 implements Scrollable {
@@ -93,7 +94,7 @@ implements Scrollable {
     private JComboBox<String> statusFilterBox;
     private JTextArea insightsArea;
     private ChartPanel chartPanel;
-    private DefaultPieDataset dataset;
+    private DefaultPieDataset<String> dataset;
     private JPanel summaryPanel;
     private JPanel formPanel;
     private JPanel tablePanel;
@@ -429,8 +430,8 @@ implements Scrollable {
     }
 
     private JPanel createChartPanel() {
-        this.dataset = new DefaultPieDataset();
-        JFreeChart chart = ChartFactory.createPieChart((String)"Lending Distribution", (PieDataset)this.dataset, (boolean)true, (boolean)true, (boolean)false);
+        this.dataset = new DefaultPieDataset<>();
+        JFreeChart chart = ChartFactory.createPieChart("Lending Distribution", this.dataset, true, true, false);
         this.chartPanel = new ChartPanel(chart);
         this.chartPanel.setName("card");
         this.chartPanel.setBorder((Border)BorderFactory.createTitledBorder(BorderFactory.createLineBorder(ThemeUtil.getBorderColor(), 1, true), "Distribution", 1, 2, new Font("SansSerif", 1, 12), ThemeUtil.getTextColor()));
@@ -476,6 +477,7 @@ implements Scrollable {
         this.updateChartStyle();
     }
 
+    @SuppressWarnings("unchecked")
     private void updateChartStyle() {
         if (this.chartPanel == null || this.chartPanel.getChart() == null) {
             return;
@@ -490,15 +492,15 @@ implements Scrollable {
             chart.getTitle().setPaint((Paint)text);
             chart.getTitle().setFont(new Font("SansSerif", 1, 12));
         }
-        PiePlot plot = (PiePlot)chart.getPlot();
+        PiePlot<String> plot = (PiePlot<String>)chart.getPlot();
         plot.setBackgroundPaint((Paint)bg);
         plot.setOutlinePaint((Paint)border);
         plot.setLabelFont(new Font("SansSerif", 0, 10));
         plot.setLabelPaint((Paint)text);
         plot.setLabelBackgroundPaint((Paint)bg);
         plot.setLabelOutlinePaint((Paint)border);
-        plot.setSectionPaint((Comparable)((Object)"Given (Lent)"), (Paint)(dark ? new Color(102, 187, 106) : new Color(46, 125, 50)));
-        plot.setSectionPaint((Comparable)((Object)"Taken (Borrowed)"), (Paint)(dark ? new Color(239, 83, 80) : new Color(198, 40, 40)));
+        plot.setSectionPaint("Given (Lent)", (Paint)(dark ? new Color(102, 187, 106) : new Color(46, 125, 50)));
+        plot.setSectionPaint("Taken (Borrowed)", (Paint)(dark ? new Color(239, 83, 80) : new Color(198, 40, 40)));
         if (chart.getLegend() != null) {
             chart.getLegend().setBackgroundPaint((Paint)bg);
             chart.getLegend().setItemPaint((Paint)text);
@@ -593,8 +595,8 @@ implements Scrollable {
         this.applyFilters();
         this.updateSummaryColors();
         this.dataset.clear();
-        this.dataset.setValue((Comparable)((Object)"Given (Lent)"), totalGiven);
-        this.dataset.setValue((Comparable)((Object)"Taken (Borrowed)"), totalTaken);
+        this.dataset.setValue("Given (Lent)", totalGiven);
+        this.dataset.setValue("Taken (Borrowed)", totalTaken);
         this.updateChartStyle();
         StringBuilder insights = new StringBuilder();
         int activeOverdueCount = 0;

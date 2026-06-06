@@ -169,7 +169,7 @@ public class Loan {
      * Calculates the interest earned/accrued dynamically.
      * Uses daily precision based on days elapsed between loan start date and now.
      */
-    public double getInterestEarned() {
+    public final double getInterestEarned() {
         if (interestRate <= 0.0) {
             return 0.0;
         }
@@ -187,14 +187,14 @@ public class Loan {
     /**
      * Calculates the total amount payable (Principal + Dynamic Interest).
      */
-    public double getTotalPayable() {
+    public final double getTotalPayable() {
         return totalAmount + getInterestEarned();
     }
 
     /**
      * Calculates remaining amount (Principal + Dynamic Interest - Paid Amount).
      */
-    public double getRemainingAmount() {
+    public final double getRemainingAmount() {
         return Math.max(0.0, getTotalPayable() - paidAmount);
     }
 
@@ -211,7 +211,7 @@ public class Loan {
      * - Overdue: if deadline passed and remaining amount > 0
      * - Active: otherwise
      */
-    public void updateStatus() {
+    public final void updateStatus() {
         if (getRemainingAmount() <= 0.0) {
             this.status = "Closed";
         } else if (dueDate != null && LocalDate.now().isAfter(dueDate)) {

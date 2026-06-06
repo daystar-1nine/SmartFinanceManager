@@ -9,6 +9,7 @@ import java.awt.geom.RoundRectangle2D;
  * -------------
  * A customized Swing button with rounded borders and clean hover highlights.
  */
+@SuppressWarnings({"serial", "this-escape"})
 public class RoundedButton extends JButton {
 
     private int radius = 15;

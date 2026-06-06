@@ -8,6 +8,7 @@ import java.awt.*;
  * -------
  * A reusable sidebar panel containing navigation elements.
  */
+@SuppressWarnings({"serial", "this-escape"})
 public class Sidebar extends JPanel {
 
     public Sidebar() {

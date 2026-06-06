@@ -56,6 +56,7 @@ import service.TransactionService;
 import ui.LoginFrame;
 import util.ThemeUtil;
 
+@SuppressWarnings({"serial", "this-escape"})
 public class ProfilePanel
 extends JPanel
 implements Scrollable {

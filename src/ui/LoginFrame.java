@@ -12,6 +12,7 @@ import java.awt.*;
  * This class represents the login screen of the application.
  * It allows users to enter credentials and access the system.
  */
+@SuppressWarnings({"serial", "this-escape"})
 public class LoginFrame extends JFrame {
 
     private JTextField usernameField;

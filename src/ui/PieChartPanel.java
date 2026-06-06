@@ -13,6 +13,7 @@ import java.util.Map;
  * A custom Swing component that draws a beautiful, anti-aliased pie chart
  * showing expense category distribution.
  */
+@SuppressWarnings({"serial", "this-escape"})
 public class PieChartPanel extends JPanel {
     private final Map<String, Double> expenses = new HashMap<>();
     private double totalExpense = 0.0;

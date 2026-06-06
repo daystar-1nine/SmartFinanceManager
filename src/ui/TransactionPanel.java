@@ -37,6 +37,7 @@ import java.util.List;
  * ✔ Summary + Financial Score
  * ✔ Export TXT / CSV
  */
+@SuppressWarnings({"serial", "this-escape"})
 public class TransactionPanel extends JPanel implements Scrollable {
 
     // ================= SERVICES =================
