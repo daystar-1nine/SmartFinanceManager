@@ -1,71 +1,60 @@
 package service;
 
 import model.Goal;
-import util.FileUtil;
-
-import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.logging.Logger;
 
 /**
- * GoalService
- * -----------
- * Manages loading and saving user savings goals.
+ * GoalService Class
+ * -----------------
+ * Manages savings goal logic and cached states.
+ * Utilizes constructor dependency injection for GoalDAO.
  */
 public class GoalService {
 
-    private static final String GOAL_DIR = util.Constants.GOAL_DIR;
+    private static final Logger LOGGER = Logger.getLogger(GoalService.class.getName());
+    private final GoalDAO goalDAO;
+    private final Map<String, List<Goal>> goalCache = new HashMap<>();
 
     /**
-     * Loads savings goals for a specific user
+     * Dependency Injected Constructor
      */
-    public List<Goal> loadGoals(String username) {
-        List<Goal> goals = new ArrayList<>();
-        File file = new File(GOAL_DIR + username + "_goals.txt");
-        if (!file.exists()) {
-            return goals;
-        }
-
-        List<String> lines = FileUtil.readFromFile(file.getPath());
-        for (String line : lines) {
-            Goal goal = Goal.fromFileString(line);
-            if (goal != null) {
-                goals.add(goal);
-            }
-        }
-        return goals;
+    public GoalService(GoalDAO goalDAO) {
+        this.goalDAO = goalDAO;
     }
 
     /**
-     * Saves savings goals for a specific user
+     * Loads user savings goals using local caching.
      */
-    public void saveGoals(String username, List<Goal> goals) {
-        File dir = new File(GOAL_DIR);
-        if (!dir.exists()) {
-            dir.mkdirs();
+    public synchronized List<Goal> loadGoals(String username) {
+        if (username == null) return new ArrayList<>();
+        if (goalCache.containsKey(username)) {
+            return new ArrayList<>(goalCache.get(username));
         }
+        List<Goal> goals = goalDAO.loadGoals(username);
+        goalCache.put(username, goals);
+        return new ArrayList<>(goals);
+    }
 
-        String path = GOAL_DIR + username + "_goals.txt";
-        File file = new File(path);
-        File tempFile = new File(file.getAbsolutePath() + ".tmp");
-
-        try {
-            try (java.io.BufferedWriter writer = new java.io.BufferedWriter(new java.io.FileWriter(tempFile))) {
-                for (Goal goal : goals) {
-                    if (goal != null) {
-                        writer.write(goal.toFileString());
-                        writer.newLine();
-                    }
-                }
-            }
-            java.nio.file.Files.move(tempFile.toPath(), file.toPath(),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
-                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-        } catch (java.io.IOException e) {
-            System.out.println("Error saving goals: " + e.getMessage());
-            if (tempFile.exists()) {
-                tempFile.delete();
-            }
+    /**
+     * Saves user savings goals and updates cache.
+     */
+    public synchronized void saveGoals(String username, List<Goal> goals) {
+        if (username == null || goals == null) {
+            LOGGER.warning("Save requested with null user or goals. Skipping.");
+            return;
         }
+        goalDAO.saveGoals(username, goals);
+        goalCache.put(username, new ArrayList<>(goals));
+    }
+
+    /**
+     * Clears local cache for a user.
+     */
+    public synchronized void clearCache(String username) {
+        goalCache.remove(username);
     }
 }

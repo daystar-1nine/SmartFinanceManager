@@ -20,9 +20,11 @@ public class SignupFrame extends JFrame {
     private JPasswordField passwordField;
     private JPasswordField confirmPasswordField;
     private JFrame parent; // Keep track of parent to restore it later
+    private final AuthService authService;
 
-    public SignupFrame(JFrame parent) {
+    public SignupFrame(JFrame parent, AuthService authService) {
         this.parent = parent;
+        this.authService = authService;
 
         setTitle("Smart Finance Manager - Signup");
         setSize(400, 300);
@@ -67,8 +69,6 @@ public class SignupFrame extends JFrame {
 
         add(panel);
 
-        AuthService authService = new AuthService();
-
         /**
          * Create Account Button Action
          * ----------------------------
@@ -76,30 +76,38 @@ public class SignupFrame extends JFrame {
          */
         createButton.addActionListener(e -> {
 
-            String username = util.CSVUtil.sanitize(usernameField.getText());
-            String password = new String(passwordField.getPassword());
-            String confirmPassword = new String(confirmPasswordField.getPassword());
+            String username = util.CSVUtil.sanitize(usernameField.getText().trim());
+            char[] password = passwordField.getPassword();
+            char[] confirmPassword = confirmPasswordField.getPassword();
 
             // Validation checks
-            if (username.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
+            if (username.isEmpty() || password.length == 0 || confirmPassword.length == 0) {
                 JOptionPane.showMessageDialog(this,
                         "Please fill all fields");
+                java.util.Arrays.fill(password, '0');
+                java.util.Arrays.fill(confirmPassword, '0');
                 return;
             }
 
-            if (!password.equals(confirmPassword)) {
+            if (!java.util.Arrays.equals(password, confirmPassword)) {
                 JOptionPane.showMessageDialog(this,
                         "Passwords do not match");
+                java.util.Arrays.fill(password, '0');
+                java.util.Arrays.fill(confirmPassword, '0');
                 return;
             }
 
-            if (password.length() < 4) {
+            if (password.length < 4) {
                 JOptionPane.showMessageDialog(this,
                         "Password must be at least 4 characters");
+                java.util.Arrays.fill(password, '0');
+                java.util.Arrays.fill(confirmPassword, '0');
                 return;
             }
 
-            boolean created = authService.signup(username, password);
+            boolean created = this.authService.signup(username, password);
+            java.util.Arrays.fill(password, '0');
+            java.util.Arrays.fill(confirmPassword, '0');
 
             if (created) {
 
@@ -112,7 +120,8 @@ public class SignupFrame extends JFrame {
                 if (parent != null) {
                     parent.setVisible(true);
                 } else {
-                    new LoginFrame();
+                    // Fallback using cached services - should not normally occur if parent is provided
+                    JOptionPane.showMessageDialog(this, "Please restart the application to login.");
                 }
 
             } else {

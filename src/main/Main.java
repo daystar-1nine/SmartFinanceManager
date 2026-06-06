@@ -1,6 +1,7 @@
 package main;
 
 import ui.LoginFrame;
+import service.*;
 
 import javax.swing.*;
 
@@ -21,8 +22,16 @@ public class Main {
          */
         SwingUtilities.invokeLater(() -> {
 
-            // Start application with Login Screen
-            new LoginFrame();
+            // Initialize DAOs and Services
+            AuthService authService = new AuthService();
+            TransactionService transactionService = new TransactionService();
+            LoanDAO loanDAO = new FileLoanDAO();
+            LoanService loanService = new LoanService(loanDAO);
+            BudgetDAO budgetDAO = new FileBudgetDAO();
+            GoalDAO goalDAO = new FileGoalDAO();
+
+            // Start application with Login Screen, passing in the dependencies
+            new LoginFrame(authService, transactionService, loanService, budgetDAO, goalDAO);
 
         });
     }

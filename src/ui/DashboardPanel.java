@@ -55,6 +55,7 @@ public class DashboardPanel extends JPanel implements Scrollable {
 
     private final TransactionService transactionService;
     private final BudgetService budgetService;
+    private final LoanService loanService;
     private final InsightService insightService;
     private final String username;
     
@@ -97,10 +98,11 @@ public class DashboardPanel extends JPanel implements Scrollable {
     private JPanel emptyStatePanel;
     private int hoveredRow = -1;
 
-    public DashboardPanel(String username) {
+    public DashboardPanel(String username, TransactionService transactionService, BudgetService budgetService, LoanService loanService) {
         this.username = username;
-        this.transactionService = new TransactionService();
-        this.budgetService = new BudgetService(username);
+        this.transactionService = transactionService;
+        this.budgetService = budgetService;
+        this.loanService = loanService;
         this.insightService = new InsightService();
 
         setLayout(new BorderLayout(15, 15));
@@ -451,7 +453,6 @@ public class DashboardPanel extends JPanel implements Scrollable {
             @Override
             protected Map<String, Object> doInBackground() {
                 List<Transaction> transactions = transactionService.loadTransactions(username);
-                LoanService loanService = new LoanService();
                 List<Loan> loans = loanService.loadLoans(username);
 
                 java.util.HashMap<String, Object> map = new java.util.HashMap<>();

@@ -65,6 +65,7 @@ implements Scrollable {
     private final TransactionService transactionService;
     private final BudgetService budgetService;
     private final GoalService goalService;
+    private final Runnable logoutCallback;
     private User currentUser;
     private List<Goal> userGoals;
     private JTextField emailField;
@@ -105,12 +106,13 @@ implements Scrollable {
     private JButton logoutBtn;
     private JButton resetBtn;
 
-    public ProfilePanel(String username) {
+    public ProfilePanel(String username, AuthService authService, TransactionService transactionService, BudgetService budgetService, GoalService goalService, Runnable logoutCallback) {
         this.username = username;
-        this.authService = new AuthService();
-        this.transactionService = new TransactionService();
-        this.budgetService = new BudgetService(username);
-        this.goalService = new GoalService();
+        this.authService = authService;
+        this.transactionService = transactionService;
+        this.budgetService = budgetService;
+        this.goalService = goalService;
+        this.logoutCallback = logoutCallback;
         this.currentUser = this.authService.getUser(username);
         if (this.currentUser == null) {
             this.currentUser = new User(username, "", username.toLowerCase() + "@example.com", LocalDate.now().toString());
@@ -538,11 +540,9 @@ implements Scrollable {
     private void logout() {
         int confirm = JOptionPane.showConfirmDialog(this, "Are you sure you want to logout?", "Confirm Logout", 0);
         if (confirm == 0) {
-            Window parentWindow = SwingUtilities.getWindowAncestor(this);
-            if (parentWindow != null) {
-                parentWindow.dispose();
+            if (this.logoutCallback != null) {
+                this.logoutCallback.run();
             }
-            new LoginFrame();
         }
     }
 
@@ -559,12 +559,13 @@ implements Scrollable {
 
     private void updateCredentials() {
         String email = this.emailField.getText().trim();
-        String password = new String(this.passwordField.getPassword());
-        if (email.isEmpty() || password.isEmpty()) {
+        char[] password = this.passwordField.getPassword();
+        if (email.isEmpty() || password.length == 0) {
             JOptionPane.showMessageDialog(this, "Fields cannot be empty", "Error", 0);
             return;
         }
         boolean success = this.authService.updateUserCredentials(this.username, password, email);
+        java.util.Arrays.fill(password, '0'); // Clear memory buffer
         if (success) {
             this.currentUser = this.authService.getUser(this.username);
             if (this.currentUser == null) {

@@ -57,9 +57,9 @@ public class ReportPanel extends JPanel implements Scrollable {
     );
     private static final Color DEFAULT_COLOR = new Color(170, 170, 170);
 
-    public ReportPanel(String username) {
+    public ReportPanel(String username, TransactionService transactionService) {
         this.username = username;
-        this.transactionService = new TransactionService();
+        this.transactionService = transactionService;
 
         setLayout(new BorderLayout(15, 15));
         setBorder(new EmptyBorder(15, 15, 15, 15));

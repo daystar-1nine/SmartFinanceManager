@@ -119,9 +119,9 @@ implements Scrollable {
     private JButton exportCsvBtn;
     private JButton exportTxtBtn;
 
-    public LoanPanel(String username) {
+    public LoanPanel(String username, LoanService loanService) {
         this.username = username;
-        this.loanService = new LoanService();
+        this.loanService = loanService;
         this.setLayout(new BorderLayout(15, 15));
         this.setBorder(new EmptyBorder(15, 15, 15, 15));
         this.setBackground(ThemeUtil.getBackgroundColor());

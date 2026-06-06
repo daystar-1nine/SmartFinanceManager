@@ -90,11 +90,11 @@ public class TransactionPanel extends JPanel implements Scrollable {
     private JPanel notificationPanel, insightPanel;
 
     // ================= CONSTRUCTOR =================
-    public TransactionPanel(String username) {
+    public TransactionPanel(String username, TransactionService transactionService, BudgetService budgetService) {
 
         this.username = username;
-        this.transactionService = new TransactionService();
-        this.budgetService = new BudgetService(username);
+        this.transactionService = transactionService;
+        this.budgetService = budgetService;
         this.insightService = new InsightService();
         this.pieChartPanel = new PieChartPanel(); // 🔥 ADD THIS
 

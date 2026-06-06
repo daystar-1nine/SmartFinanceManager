@@ -3,107 +3,73 @@ package service;
 import model.Loan;
 import model.Payment;
 
-import java.io.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * LoanService Class
  * -----------------
- * Handles file operations for user loan data, including updating payment logs.
+ * Coordinates business rules for loans and payments.
+ * Integrates constructor dependency injection for LoanDAO and in-memory cache.
  */
 public class LoanService {
 
-    private static final String BASE_PATH = util.Constants.LOAN_DIR;
+    private static final Logger LOGGER = Logger.getLogger(LoanService.class.getName());
+    private final LoanDAO loanDAO;
+    private final Map<String, List<Loan>> loanCache = new HashMap<>();
 
     /**
-     * Resolves the loan data file for a user and creates parent directories if needed.
+     * Dependency Injected Constructor
      */
-    private File getUserFile(String username) {
-        File file = new File(BASE_PATH + username + "_loans.txt");
-        File parentDir = file.getParentFile();
-        if (!parentDir.exists()) {
-            parentDir.mkdirs();
-        }
-        return file;
+    public LoanService(LoanDAO loanDAO) {
+        this.loanDAO = loanDAO;
     }
 
     /**
-     * Appends a new loan to the user's data file.
+     * Appends a new loan and updates local cache.
      */
-    public void addLoan(String username, Loan loan) {
+    public synchronized void addLoan(String username, Loan loan) {
         if (loan == null) {
-            System.out.println("Loan object is null. Skipping save.");
+            LOGGER.warning("Null loan passed. Skipping add.");
             return;
         }
-
-        File file = getUserFile(username);
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, true))) {
-            writer.write(loan.toFileString());
-            writer.newLine();
-        } catch (IOException e) {
-            System.out.println("Error saving loan: " + e.getMessage());
+        loanDAO.addLoan(username, loan);
+        if (loanCache.containsKey(username)) {
+            loanCache.get(username).add(loan);
         }
     }
 
     /**
-     * Loads all loans for a given username.
+     * Loads loans for a given username using in-memory caching.
      */
-    public List<Loan> loadLoans(String username) {
-        List<Loan> loans = new ArrayList<>();
-        File file = getUserFile(username);
-
-        if (!file.exists()) {
-            return loans;
+    public synchronized List<Loan> loadLoans(String username) {
+        if (username == null) return new ArrayList<>();
+        if (loanCache.containsKey(username)) {
+            return new ArrayList<>(loanCache.get(username));
         }
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                Loan loan = Loan.fromFileString(line);
-                if (loan != null) {
-                    loans.add(loan);
-                }
-            }
-        } catch (IOException e) {
-            System.out.println("Error loading loans: " + e.getMessage());
-        }
-
-        return loans;
+        List<Loan> loans = loanDAO.loadLoans(username);
+        loanCache.put(username, loans);
+        return new ArrayList<>(loans);
     }
 
     /**
-     * Rewrites the user's data file with the updated list of loans.
+     * Saves updated list of loans and refreshes cache.
      */
-    public void saveAllLoans(String username, List<Loan> loans) {
-        File file = getUserFile(username);
-        File tempFile = new File(file.getAbsolutePath() + ".tmp");
-        try {
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
-                for (Loan loan : loans) {
-                    if (loan != null) {
-                        writer.write(loan.toFileString());
-                        writer.newLine();
-                    }
-                }
-            }
-            java.nio.file.Files.move(tempFile.toPath(), file.toPath(),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
-                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
-            System.out.println("Error writing all loans: " + e.getMessage());
-            if (tempFile.exists()) {
-                tempFile.delete();
-            }
-        }
+    public synchronized void saveAllLoans(String username, List<Loan> loans) {
+        loanDAO.saveAllLoans(username, loans);
+        loanCache.put(username, new ArrayList<>(loans));
     }
 
     /**
-     * Updates the paid amount of a specific loan, capping it at total payable and appending a Payment entry.
+     * Updates the paid amount of a specific loan, logging the payment.
      */
-    public void updateLoanPayment(String username, int loanId, double paymentAmount) {
+    public synchronized void updateLoanPayment(String username, int loanId, double paymentAmount) {
         List<Loan> loans = loadLoans(username);
+        boolean updated = false;
         for (Loan loan : loans) {
             if (loan.getId() == loanId) {
                 double maxPayable = loan.getTotalPayable();
@@ -117,40 +83,56 @@ public class LoanService {
                 
                 loan.setPaidAmount(newPaid);
                 
-                // Record the payment in history if it's positive
+                // Record the payment in history if positive
                 if (paymentAmount > 0.0) {
                     loan.getPaymentHistory().add(new Payment(paymentAmount, LocalDate.now()));
                 }
+                updated = true;
                 break;
             }
         }
-        saveAllLoans(username, loans);
+        if (updated) {
+            saveAllLoans(username, loans);
+        }
     }
 
     /**
      * Marks a specific loan as fully paid.
      */
-    public void markAsPaid(String username, int loanId) {
+    public synchronized void markAsPaid(String username, int loanId) {
         List<Loan> loans = loadLoans(username);
+        boolean updated = false;
         for (Loan loan : loans) {
             if (loan.getId() == loanId) {
                 double remaining = loan.getRemainingAmount();
                 if (remaining > 0.0) {
                     loan.setPaidAmount(loan.getTotalPayable());
                     loan.getPaymentHistory().add(new Payment(remaining, LocalDate.now()));
+                    updated = true;
                 }
                 break;
             }
         }
-        saveAllLoans(username, loans);
+        if (updated) {
+            saveAllLoans(username, loans);
+        }
     }
 
     /**
      * Deletes a loan by ID.
      */
-    public void deleteLoan(String username, int loanId) {
+    public synchronized void deleteLoan(String username, int loanId) {
         List<Loan> loans = loadLoans(username);
-        loans.removeIf(loan -> loan.getId() == loanId);
-        saveAllLoans(username, loans);
+        boolean removed = loans.removeIf(loan -> loan.getId() == loanId);
+        if (removed) {
+            saveAllLoans(username, loans);
+        }
+    }
+
+    /**
+     * Clears local in-memory cache for a user.
+     */
+    public synchronized void clearCache(String username) {
+        loanCache.remove(username);
     }
 }

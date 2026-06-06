@@ -3,6 +3,7 @@ package ui;
 import javax.swing.*;
 import java.awt.*;
 import util.IconUtil;
+import service.*;
 
 /**
  * DashboardFrame Class
@@ -17,8 +18,20 @@ public class DashboardFrame extends JFrame {
     private JComponent contentPanel; 
     private String username;
 
-    public DashboardFrame(String username) {
+    private final AuthService authService;
+    private final TransactionService transactionService;
+    private final LoanService loanService;
+    private final BudgetService budgetService;
+    private final GoalService goalService;
+
+    public DashboardFrame(String username, AuthService authService, TransactionService transactionService, 
+                          LoanService loanService, BudgetDAO budgetDAO, GoalDAO goalDAO) {
         this.username = username;
+        this.authService = authService;
+        this.transactionService = transactionService;
+        this.loanService = loanService;
+        this.budgetService = new BudgetService(username, budgetDAO);
+        this.goalService = new GoalService(goalDAO);
 
         setTitle("Smart Finance Manager - Dashboard");
         setSize(1000, 600);
@@ -75,7 +88,7 @@ public class DashboardFrame extends JFrame {
         mainPanel.add(welcomeLabel, BorderLayout.NORTH);
 
         // Default Content Panel
-        JScrollPane scrollPane = new JScrollPane(new DashboardPanel(username));
+        JScrollPane scrollPane = new JScrollPane(new DashboardPanel(username, transactionService, budgetService, loanService));
         scrollPane.setBorder(null);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         scrollPane.getHorizontalScrollBar().setUnitIncrement(16);
@@ -88,11 +101,16 @@ public class DashboardFrame extends JFrame {
         add(mainPanel, BorderLayout.CENTER);
 
         // Menu Button Action Listeners
-        dashboardBtn.addActionListener(e -> switchPanel(new DashboardPanel(username)));
-        addBtn.addActionListener(e -> switchPanel(new TransactionPanel(username)));
-        reportBtn.addActionListener(e -> switchPanel(new ReportPanel(username)));
-        loansBtn.addActionListener(e -> switchPanel(new LoanPanel(username)));
-        profileBtn.addActionListener(e -> switchPanel(new ProfilePanel(username)));
+        Runnable logoutCallback = () -> {
+            this.dispose();
+            new LoginFrame(authService, transactionService, loanService, budgetDAO, goalDAO);
+        };
+
+        dashboardBtn.addActionListener(e -> switchPanel(new DashboardPanel(username, transactionService, budgetService, loanService)));
+        addBtn.addActionListener(e -> switchPanel(new TransactionPanel(username, transactionService, budgetService)));
+        reportBtn.addActionListener(e -> switchPanel(new ReportPanel(username, transactionService)));
+        loansBtn.addActionListener(e -> switchPanel(new LoanPanel(username, loanService)));
+        profileBtn.addActionListener(e -> switchPanel(new ProfilePanel(username, authService, transactionService, budgetService, goalService, logoutCallback)));
         aboutBtn.addActionListener(e -> switchPanel(new AboutPanel()));
 
         setVisible(true);

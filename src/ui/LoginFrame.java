@@ -1,6 +1,6 @@
 package ui;
 
-import service.AuthService;
+import service.*;
 import util.ThemeUtil;
 import util.IconUtil;
 
@@ -18,8 +18,20 @@ public class LoginFrame extends JFrame {
 
     private JTextField usernameField;
     private JPasswordField passwordField;
+    
+    private final AuthService authService;
+    private final TransactionService transactionService;
+    private final LoanService loanService;
+    private final BudgetDAO budgetDAO;
+    private final GoalDAO goalDAO;
 
-    public LoginFrame() {
+    public LoginFrame(AuthService authService, TransactionService transactionService, LoanService loanService, 
+                      BudgetDAO budgetDAO, GoalDAO goalDAO) {
+        this.authService = authService;
+        this.transactionService = transactionService;
+        this.loanService = loanService;
+        this.budgetDAO = budgetDAO;
+        this.goalDAO = goalDAO;
 
         // Frame settings
         setTitle("Smart Finance Manager - Login");
@@ -75,9 +87,8 @@ public class LoginFrame extends JFrame {
         add(buttonPanel, BorderLayout.SOUTH);
         getContentPane().setBackground(ThemeUtil.getBackgroundColor());
 
-        // Auth service instance
-        AuthService authService = new AuthService();
-
+        // Auth service instance passed in constructor
+        
         /**
          * Login Button Action
          * -------------------
@@ -86,16 +97,17 @@ public class LoginFrame extends JFrame {
         loginButton.addActionListener(e -> {
 
             String username = usernameField.getText().trim();
-            String password = new String(passwordField.getPassword());
+            char[] password = passwordField.getPassword();
 
             // Input validation
-            if (username.isEmpty() || password.isEmpty()) {
+            if (username.isEmpty() || password.length == 0) {
                 JOptionPane.showMessageDialog(this,
                         "Please enter all fields");
                 return;
             }
 
             boolean success = authService.login(username, password);
+            java.util.Arrays.fill(password, '0'); // Clear memory buffer immediately
 
             if (success) {
 
@@ -106,7 +118,7 @@ public class LoginFrame extends JFrame {
                 dispose();
 
                 // Open dashboard
-                new DashboardFrame(username);
+                new DashboardFrame(username, authService, transactionService, loanService, budgetDAO, goalDAO);
 
             } else {
 
@@ -122,7 +134,7 @@ public class LoginFrame extends JFrame {
          */
         signupButton.addActionListener(e -> {
             setVisible(false);
-            new SignupFrame(this);
+            new SignupFrame(this, authService);
         });
 
         ThemeUtil.applyTheme(this);
