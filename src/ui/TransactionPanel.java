@@ -190,8 +190,8 @@ public class TransactionPanel extends JPanel implements Scrollable {
         amountField = new JTextField(10);
         noteField = new JTextField(15);
 
-        typeBox = new JComboBox<>();
-        categoryBox = new JComboBox<>();
+        typeBox = new JComboBox<>(new String[]{"Income", "Expense"});
+        categoryBox = new JComboBox<>(Constants.CATEGORIES);
 
         gbc.gridy = 1;
         gbc.gridx = 0; gbc.weightx = 0.15; inputPanel.add(amountField, gbc);
@@ -221,6 +221,10 @@ public class TransactionPanel extends JPanel implements Scrollable {
         JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         searchField = new JTextField(12);
         filterCategoryBox = new JComboBox<>();
+        filterCategoryBox.addItem("All");
+        for (String cat : Constants.CATEGORIES) {
+            filterCategoryBox.addItem(cat);
+        }
         searchBtn = new JButton("Search");
         resetBtn = new JButton("Reset");
 
@@ -270,6 +274,41 @@ public class TransactionPanel extends JPanel implements Scrollable {
         );
 
         table = new JTable(tableModel);
+
+        // Populate form fields on row selection (UX improvement)
+        table.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                int row = table.getSelectedRow();
+                if (row != -1) {
+                    try {
+                        String type = tableModel.getValueAt(row, 1).toString();
+                        String amountStr = tableModel.getValueAt(row, 2).toString();
+                        String category = tableModel.getValueAt(row, 3).toString();
+                        String note = tableModel.getValueAt(row, 4).toString();
+
+                        amountField.setText(amountStr);
+                        noteField.setText(note);
+
+                        // Set Type ComboBox
+                        if ("Income".equalsIgnoreCase(type)) {
+                            typeBox.setSelectedIndex(0);
+                        } else {
+                            typeBox.setSelectedIndex(1);
+                        }
+
+                        // Set Category ComboBox
+                        for (int i = 0; i < Constants.CATEGORIES.length; i++) {
+                            if (Constants.CATEGORIES[i].equalsIgnoreCase(category)) {
+                                categoryBox.setSelectedIndex(i);
+                                break;
+                            }
+                        }
+                    } catch (Exception ex) {
+                        // ignore parsing or bounds errors
+                    }
+                }
+            }
+        });
 
         // 🔥 1. Enable horizontal scrolling
         table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
@@ -621,6 +660,8 @@ public class TransactionPanel extends JPanel implements Scrollable {
     private void clearFields(){
         amountField.setText("");
         noteField.setText("");
+        if (typeBox.getItemCount() > 0) typeBox.setSelectedIndex(0);
+        if (categoryBox.getItemCount() > 0) categoryBox.setSelectedIndex(0);
     }
 
     private JPanel createNotificationPanel() {
