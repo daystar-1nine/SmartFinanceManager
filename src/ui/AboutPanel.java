@@ -81,6 +81,8 @@ public class AboutPanel extends JPanel {
         add(createHeader(), BorderLayout.NORTH);
         add(createTeamSection(), BorderLayout.CENTER);
         add(createFooter(), BorderLayout.SOUTH);
+        
+        util.ThemeUtil.applyTheme(this);
     }
 
     /**
@@ -95,26 +97,31 @@ public class AboutPanel extends JPanel {
         title.setFont(new Font("SansSerif", Font.BOLD, 30));
         title.setHorizontalAlignment(JLabel.CENTER);
         title.setForeground(Color.WHITE);
+        title.setName("customColorLabel");
         // Description
         JLabel desc = new JLabel("<html><p style='text-align:center;'>A personal finance management application designed to help users track expenses, manage loans, and gain smart financial insights.</p></html>");
         desc.setFont(new Font("SansSerif", Font.PLAIN, 14));
         desc.setHorizontalAlignment(JLabel.CENTER);
         desc.setForeground(Color.WHITE);
+        desc.setName("customColorLabel");
         // Tagline
         JLabel tagline = new JLabel("Built with simplicity, designed for smarter financial decisions.");
         tagline.setFont(new Font("SansSerif", Font.ITALIC, 13));
         tagline.setHorizontalAlignment(JLabel.CENTER);
         tagline.setForeground(Color.LIGHT_GRAY);
+        tagline.setName("customColorLabel");
         // Project features list
         JLabel features = new JLabel("<html><ul style='margin-left:20px;'><li>Transaction tracking</li><li>Loan management</li><li>Financial reports</li><li>Insights & analytics</li></ul></html>");
         features.setFont(new Font("SansSerif", Font.PLAIN, 13));
         features.setHorizontalAlignment(JLabel.CENTER);
         features.setForeground(Color.WHITE);
+        features.setName("customColorLabel");
         // Vision
         JLabel vision = new JLabel("<html><p style='text-align:center;'><b>Our Vision:</b> Build simple yet powerful tools that help users take control of their financial life.</p></html>");
         vision.setFont(new Font("SansSerif", Font.PLAIN, 12));
         vision.setHorizontalAlignment(JLabel.CENTER);
         vision.setForeground(Color.WHITE);
+        vision.setName("customColorLabel");
         // Assemble vertically
         JPanel vbox = new JPanel(new GridLayout(0, 1, 8, 8));
         vbox.setOpaque(false);
@@ -151,16 +158,14 @@ public class AboutPanel extends JPanel {
      */
     private JPanel createMemberCard(Member member) {
         JPanel card = new JPanel();
+        card.setName("card");
         card.setLayout(new BorderLayout(5, 5));
-        card.setBorder(BorderFactory.createCompoundBorder(
-                new RoundedBorder(12, Color.GRAY),
-                new EmptyBorder(10, 10, 10, 10)));
         // Name & role (top)
         JLabel nameLabel = new JLabel(member.name);
         nameLabel.setFont(new Font("SansSerif", Font.BOLD, 14));
         JLabel roleLabel = new JLabel(member.role);
         roleLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        roleLabel.setForeground(Color.DARK_GRAY);
+        roleLabel.setForeground(util.ThemeUtil.getSecondaryTextColor());
         // Description (center)
         JLabel descLabel = new JLabel("<html><i>" + member.description + "</i></html>");
         descLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
