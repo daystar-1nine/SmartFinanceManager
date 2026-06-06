@@ -86,13 +86,26 @@ graph TD
 
 ## 💻 Installation & Setup
 
-Follow these simple steps to run the Smart Finance Manager locally:
+Choose one of the following methods to install and run the Smart Finance Manager:
 
 ### Prerequisites:
 *   **Java Development Kit (JDK 17 or higher)** installed.
-*   An IDE (IntelliJ IDEA, Eclipse, or NetBeans).
+*   An IDE (IntelliJ IDEA, Eclipse, or NetBeans) — *only if building/running from source*.
 
-### Step-by-Step Instructions:
+---
+
+### Option A: Run Pre-built Executable JAR (Quick Start)
+The easiest way to run the application is to use the self-contained executable JAR which bundles all classes, resources, and external libraries.
+
+1.  Clone the repository or download `SmartFinanceManager.jar`.
+2.  Open your terminal in the directory containing `SmartFinanceManager.jar` and run:
+    ```bash
+    java -jar SmartFinanceManager.jar
+    ```
+
+---
+
+### Option B: Build & Run from Source (IDE)
 
 1.  **Clone the Repository:**
     ```bash
@@ -101,17 +114,32 @@ Follow these simple steps to run the Smart Finance Manager locally:
     ```
 
 2.  **Import to IDE (IntelliJ IDEA Recommended):**
-    *   Open IntelliJ IDEA and select **Open**.
-    *   Navigate to the cloned directory and select it.
-    *   Verify that the Project Structure JDK is set to **JDK 17+**.
+    *   Open IntelliJ IDEA, select **Open**, and navigate to the cloned directory.
+    *   Verify that the Project Structure SDK is set to **JDK 17+**.
 
 3.  **Configure Libraries (JFreeChart):**
-    *   Ensure that the JAR files inside the `libs/` folder (`jfreechart-1.5.3.jar` and `jcommon-1.0.24.jar`) are added as project dependencies:
-        *   In IntelliJ: Right-click `libs` folder -> **Add as Library...**
+    *   Ensure the JAR files in `libs/` (`jfreechart-1.5.3.jar` and `jcommon-1.0.24.jar`) are added as project dependencies.
+    *   In IntelliJ: Right-click the `libs/` directory -> **Add as Library...**
 
 4.  **Run the Application:**
     *   Locate the file `src/main/Main.java`.
     *   Right-click `Main.java` and select **Run 'Main.main()'**.
+
+---
+
+### Option C: Build the Self-Contained JAR Locally
+
+If you want to package the source code into the self-contained `SmartFinanceManager.jar` yourself:
+
+1.  Compile the source code:
+    ```bash
+    javac -Xlint:all -cp "SmartFinanceManager/libs/*" -d out @sources.txt
+    ```
+2.  Run the build script to pack classes, resources, and dependencies:
+    ```powershell
+    # Windows PowerShell
+    powershell -ExecutionPolicy Bypass -File C:\Users\suraj\.gemini\antigravity\brain\70af736d-f304-401c-957c-1cec72b272a6\scratch\build_jar.ps1
+    ```
 
 ---
 
