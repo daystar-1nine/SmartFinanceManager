@@ -15,7 +15,7 @@ import java.util.Map;
  */
 public class BudgetService {
 
-    private static final String BUDGET_DIR = "SmartFinanceManager/src/data/budgets/";
+    private static final String BUDGET_DIR = util.Constants.BUDGET_DIR;
     private final Map<String, Double> categoryBudgets = new HashMap<>();
     private String username;
 
@@ -75,12 +75,26 @@ public class BudgetService {
         }
 
         String path = BUDGET_DIR + username + "_budgets.txt";
-        FileUtil.clearFile(path);
+        File file = new File(path);
+        File tempFile = new File(file.getAbsolutePath() + ".tmp");
 
         categoryBudgets.putAll(newBudgets);
 
-        for (Map.Entry<String, Double> entry : categoryBudgets.entrySet()) {
-            FileUtil.writeToFile(path, entry.getKey() + "," + entry.getValue(), true);
+        try {
+            try (java.io.BufferedWriter writer = new java.io.BufferedWriter(new java.io.FileWriter(tempFile))) {
+                for (Map.Entry<String, Double> entry : categoryBudgets.entrySet()) {
+                    writer.write(entry.getKey() + "," + entry.getValue());
+                    writer.newLine();
+                }
+            }
+            java.nio.file.Files.move(tempFile.toPath(), file.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.io.IOException e) {
+            System.out.println("Error saving user budgets: " + e.getMessage());
+            if (tempFile.exists()) {
+                tempFile.delete();
+            }
         }
     }
 

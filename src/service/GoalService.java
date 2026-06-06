@@ -14,7 +14,7 @@ import java.util.List;
  */
 public class GoalService {
 
-    private static final String GOAL_DIR = "SmartFinanceManager/src/data/goals/";
+    private static final String GOAL_DIR = util.Constants.GOAL_DIR;
 
     /**
      * Loads savings goals for a specific user
@@ -46,11 +46,25 @@ public class GoalService {
         }
 
         String path = GOAL_DIR + username + "_goals.txt";
-        FileUtil.clearFile(path);
+        File file = new File(path);
+        File tempFile = new File(file.getAbsolutePath() + ".tmp");
 
-        for (Goal goal : goals) {
-            if (goal != null) {
-                FileUtil.writeToFile(path, goal.toFileString(), true);
+        try {
+            try (java.io.BufferedWriter writer = new java.io.BufferedWriter(new java.io.FileWriter(tempFile))) {
+                for (Goal goal : goals) {
+                    if (goal != null) {
+                        writer.write(goal.toFileString());
+                        writer.newLine();
+                    }
+                }
+            }
+            java.nio.file.Files.move(tempFile.toPath(), file.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        } catch (java.io.IOException e) {
+            System.out.println("Error saving goals: " + e.getMessage());
+            if (tempFile.exists()) {
+                tempFile.delete();
             }
         }
     }

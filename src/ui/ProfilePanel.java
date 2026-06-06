@@ -112,6 +112,9 @@ implements Scrollable {
         this.budgetService = new BudgetService(username);
         this.goalService = new GoalService();
         this.currentUser = this.authService.getUser(username);
+        if (this.currentUser == null) {
+            this.currentUser = new User(username, "", username.toLowerCase() + "@example.com", LocalDate.now().toString());
+        }
         this.userGoals = this.goalService.loadGoals(username);
         this.setLayout(new BorderLayout(15, 15));
         this.setBorder(new EmptyBorder(15, 15, 15, 15));
@@ -564,6 +567,9 @@ implements Scrollable {
         boolean success = this.authService.updateUserCredentials(this.username, password, email);
         if (success) {
             this.currentUser = this.authService.getUser(this.username);
+            if (this.currentUser == null) {
+                this.currentUser = new User(this.username, "", this.username.toLowerCase() + "@example.com", LocalDate.now().toString());
+            }
             JOptionPane.showMessageDialog(this, "Profile updated successfully!", "Success", 1);
         } else {
             JOptionPane.showMessageDialog(this, "Failed to update profile", "Error", 0);

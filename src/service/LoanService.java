@@ -15,7 +15,7 @@ import java.util.List;
  */
 public class LoanService {
 
-    private static final String BASE_PATH = "SmartFinanceManager/src/data/loans/";
+    private static final String BASE_PATH = util.Constants.LOAN_DIR;
 
     /**
      * Resolves the loan data file for a user and creates parent directories if needed.
@@ -78,15 +78,24 @@ public class LoanService {
      */
     public void saveAllLoans(String username, List<Loan> loans) {
         File file = getUserFile(username);
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-            for (Loan loan : loans) {
-                if (loan != null) {
-                    writer.write(loan.toFileString());
-                    writer.newLine();
+        File tempFile = new File(file.getAbsolutePath() + ".tmp");
+        try {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+                for (Loan loan : loans) {
+                    if (loan != null) {
+                        writer.write(loan.toFileString());
+                        writer.newLine();
+                    }
                 }
             }
+            java.nio.file.Files.move(tempFile.toPath(), file.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             System.out.println("Error writing all loans: " + e.getMessage());
+            if (tempFile.exists()) {
+                tempFile.delete();
+            }
         }
     }
 

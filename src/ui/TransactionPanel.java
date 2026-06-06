@@ -16,8 +16,8 @@ import service.BudgetService;
 import java.util.Map;
 import service.InsightService;
 import util.ThemeUtil;
-
 import util.Constants;
+import util.AlertUtil;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
@@ -294,63 +294,102 @@ public class TransactionPanel extends JPanel implements Scrollable {
 
     // ================= CRUD =================
     private void addTransaction() {
-
         try {
-            double amount = Double.parseDouble(amountField.getText());
+            double amount = Double.parseDouble(amountField.getText().trim());
+            if (amount <= 0) {
+                AlertUtil.showError(this, "Amount must be a positive value", "Error");
+                return;
+            }
 
             String txType = typeBox.getSelectedIndex() == 0 ? "Income" : "Expense";
             String txCategory = Constants.CATEGORIES[categoryBox.getSelectedIndex()];
+            String note = noteField.getText().replace(",", ";").trim();
 
             Transaction t = new Transaction(
                     transactionId++,
                     txType,
                     amount,
                     txCategory,
-                    noteField.getText(),
+                    note,
                     LocalDate.now()
             );
 
             allTransactions.add(t);
-            transactionService.saveAllTransactions(username, allTransactions);
+            
+            SwingWorker<Void, Void> worker = new SwingWorker<>() {
+                @Override
+                protected Void doInBackground() {
+                    transactionService.saveAllTransactions(username, allTransactions);
+                    return null;
+                }
 
-            refreshTable(allTransactions);
-            clearFields();
+                @Override
+                protected void done() {
+                    refreshTable(allTransactions);
+                    clearFields();
+                }
+            };
+            worker.execute();
 
+        } catch(NumberFormatException e){
+            AlertUtil.showError(this, "Please enter a valid numeric amount", "Error");
         } catch(Exception e){
-            JOptionPane.showMessageDialog(this,"Invalid input");
+            AlertUtil.showError(this, "An error occurred: " + e.getMessage(), "Error");
         }
     }
 
     private void editTransaction() {
-
         int row = table.getSelectedRow();
         if(row == -1) return;
 
         int id = Integer.parseInt(tableModel.getValueAt(row,0).toString());
 
-        for(int i=0;i<allTransactions.size();i++){
-            if(allTransactions.get(i).getId()==id){
-                LocalDate originalDate = allTransactions.get(i).getDate();
-                String txType = typeBox.getSelectedIndex() == 0 ? "Income" : "Expense";
-                String txCategory = Constants.CATEGORIES[categoryBox.getSelectedIndex()];
-                allTransactions.set(i, new Transaction(
-                        id,
-                        txType,
-                        Double.parseDouble(amountField.getText()),
-                        txCategory,
-                        noteField.getText(),
-                        originalDate
-                ));
-                break;
+        try {
+            double amount = Double.parseDouble(amountField.getText().trim());
+            if (amount <= 0) {
+                AlertUtil.showError(this, "Amount must be a positive value", "Error");
+                return;
             }
-        }
+            String note = noteField.getText().replace(",", ";").trim();
 
-        transactionService.saveAllTransactions(username, allTransactions);
-        refreshTable(allTransactions);
+            for(int i=0;i<allTransactions.size();i++){
+                if(allTransactions.get(i).getId()==id){
+                    LocalDate originalDate = allTransactions.get(i).getDate();
+                    String txType = typeBox.getSelectedIndex() == 0 ? "Income" : "Expense";
+                    String txCategory = Constants.CATEGORIES[categoryBox.getSelectedIndex()];
+                    allTransactions.set(i, new Transaction(
+                            id,
+                            txType,
+                            amount,
+                            txCategory,
+                            note,
+                            originalDate
+                    ));
+                    break;
+                }
+            }
+
+            SwingWorker<Void, Void> worker = new SwingWorker<>() {
+                @Override
+                protected Void doInBackground() {
+                    transactionService.saveAllTransactions(username, allTransactions);
+                    return null;
+                }
+
+                @Override
+                protected void done() {
+                    refreshTable(allTransactions);
+                }
+            };
+            worker.execute();
+        } catch(NumberFormatException e){
+            AlertUtil.showError(this, "Please enter a valid numeric amount", "Error");
+        } catch(Exception e){
+            AlertUtil.showError(this, "An error occurred: " + e.getMessage(), "Error");
+        }
     }
 
     private void deleteTransaction() {
-
         int row = table.getSelectedRow();
         if(row==-1) return;
 
@@ -358,24 +397,44 @@ public class TransactionPanel extends JPanel implements Scrollable {
 
         for(int i=0;i<allTransactions.size();i++){
             if(allTransactions.get(i).getId()==id){
-
                 lastDeletedTransaction = allTransactions.get(i);
                 lastDeletedIndex = i;
-
                 allTransactions.remove(i);
                 break;
             }
         }
 
-        transactionService.saveAllTransactions(username, allTransactions);
-        refreshTable(allTransactions);
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() {
+                transactionService.saveAllTransactions(username, allTransactions);
+                return null;
+            }
 
-        int undo = JOptionPane.showConfirmDialog(this,"Undo delete?");
-        if(undo==0){
-            allTransactions.add(lastDeletedIndex,lastDeletedTransaction);
-            transactionService.saveAllTransactions(username, allTransactions);
-            refreshTable(allTransactions);
-        }
+            @Override
+            protected void done() {
+                refreshTable(allTransactions);
+
+                int undo = JOptionPane.showConfirmDialog(TransactionPanel.this, "Undo delete?");
+                if(undo == 0){
+                    allTransactions.add(lastDeletedIndex, lastDeletedTransaction);
+                    SwingWorker<Void, Void> undoWorker = new SwingWorker<>() {
+                        @Override
+                        protected Void doInBackground() {
+                            transactionService.saveAllTransactions(username, allTransactions);
+                            return null;
+                        }
+
+                        @Override
+                        protected void done() {
+                            refreshTable(allTransactions);
+                        }
+                    };
+                    undoWorker.execute();
+                }
+            }
+        };
+        worker.execute();
     }
 
     // ================= FILTER =================
@@ -492,17 +551,34 @@ public class TransactionPanel extends JPanel implements Scrollable {
 
     // ================= LOAD =================
     private void loadTransactions() {
+        tableModel.setRowCount(0);
+        tableModel.addRow(new Object[]{"Loading...", "", "", "", "", ""});
 
-        allTransactions = transactionService.loadTransactions(username);
-        refreshTable(allTransactions);
-
-        int maxId = 0;
-        for (Transaction t : allTransactions) {
-            if (t.getId() > maxId) {
-                maxId = t.getId();
+        SwingWorker<List<Transaction>, Void> worker = new SwingWorker<>() {
+            @Override
+            protected List<Transaction> doInBackground() {
+                return transactionService.loadTransactions(username);
             }
-        }
-        transactionId = maxId + 1;
+
+            @Override
+            protected void done() {
+                try {
+                    allTransactions = get();
+                    refreshTable(allTransactions);
+
+                    int maxId = 0;
+                    for (Transaction t : allTransactions) {
+                        if (t.getId() > maxId) {
+                            maxId = t.getId();
+                        }
+                    }
+                    transactionId = maxId + 1;
+                } catch (Exception e) {
+                    AlertUtil.showError(TransactionPanel.this, "Failed to load transactions: " + e.getMessage(), "Error");
+                }
+            }
+        };
+        worker.execute();
     }
 
     private void clearFields(){

@@ -16,15 +16,14 @@ import java.util.List;
  * - Load transactions
  * - Save all transactions (overwrite)
  */
-public class TransactionService {
+public class TransactionService implements TransactionDAO {
 
     // ================= CONSTANT PATH =================
 
     /**
      * Base directory for storing transaction files
      */
-    private static final String BASE_PATH =
-            "SmartFinanceManager/src/data/transactions/";
+    private static final String BASE_PATH = util.Constants.TRANSACTION_DIR;
 
     /**
      * Returns file object for a user
@@ -118,20 +117,27 @@ public class TransactionService {
                                     List<Transaction> transactions) {
 
         File file = getUserFile(username);
+        File tempFile = new File(file.getAbsolutePath() + ".tmp");
 
-        try (BufferedWriter writer =
-                     new BufferedWriter(new FileWriter(file))) {
+        try {
+            try (BufferedWriter writer =
+                         new BufferedWriter(new FileWriter(tempFile))) {
 
-            for (Transaction transaction : transactions) {
-
-                if (transaction != null) {
-                    writer.write(transaction.toFileString());
-                    writer.newLine();
+                for (Transaction transaction : transactions) {
+                    if (transaction != null) {
+                        writer.write(transaction.toFileString());
+                        writer.newLine();
+                    }
                 }
             }
-
+            java.nio.file.Files.move(tempFile.toPath(), file.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             System.out.println("Error saving all transactions: " + e.getMessage());
+            if (tempFile.exists()) {
+                tempFile.delete();
+            }
         }
     }
 }

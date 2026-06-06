@@ -9,6 +9,7 @@ import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.io.*;
 
 /**
  * AuthService Class
@@ -101,10 +102,24 @@ public class AuthService {
                     usersList.add(user);
                 }
             }
-            // Overwrite file with upgraded records
-            FileUtil.clearFile(USER_FILE);
-            for (User u : usersList) {
-                FileUtil.writeToFile(USER_FILE, u.toFileString(), true);
+            // Overwrite file with upgraded records atomically
+            File targetFile = new File(USER_FILE);
+            File tempFile = new File(targetFile.getAbsolutePath() + ".tmp");
+            try {
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+                    for (User u : usersList) {
+                        writer.write(u.toFileString());
+                        writer.newLine();
+                    }
+                }
+                java.nio.file.Files.move(tempFile.toPath(), targetFile.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException e) {
+                System.out.println("Error upgrading user password: " + e.getMessage());
+                if (tempFile.exists()) {
+                    tempFile.delete();
+                }
             }
         }
 
@@ -123,7 +138,7 @@ public class AuthService {
                 return user;
             }
         }
-        return new User(username, hashPassword("1234"), username.toLowerCase() + "@example.com", LocalDate.now().toString());
+        return null;
     }
 
     /**
@@ -151,9 +166,24 @@ public class AuthService {
         }
 
         if (updated) {
-            FileUtil.clearFile(USER_FILE);
-            for (User u : users) {
-                FileUtil.writeToFile(USER_FILE, u.toFileString(), true);
+            File targetFile = new File(USER_FILE);
+            File tempFile = new File(targetFile.getAbsolutePath() + ".tmp");
+            try {
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+                    for (User u : users) {
+                        writer.write(u.toFileString());
+                        writer.newLine();
+                    }
+                }
+                java.nio.file.Files.move(tempFile.toPath(), targetFile.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException e) {
+                System.out.println("Error updating user credentials: " + e.getMessage());
+                if (tempFile.exists()) {
+                    tempFile.delete();
+                }
+                return false;
             }
         }
 
