@@ -50,18 +50,52 @@ import service.TransactionService;
 import util.Constants;
 import util.ThemeUtil;
 
+/**
+ * <h2>DashboardPanel</h2>
+ * <p>
+ * This panel represents the primary dashboard view of the Smart Finance Manager.
+ * It integrates visual financial indicators, budget status gauges, transaction input cards,
+ * dynamic transaction tables, and natural language diagnostic panels.
+ * </p>
+ * 
+ * <h3>Architecture Role:</h3>
+ * <p>
+ * Part of the <b>UI (Presentation) Layer</b>. It receives injected services via constructor
+ * Dependency Injection (DI) and coordinates event bindings, SwingWorker asynchronous loads,
+ * and component state updates.
+ * </p>
+ * 
+ * <h3>Key UI Design Aspects:</h3>
+ * <ul>
+ *   <li><b>Grid & Border Layouts:</b> Uses BorderLayout and multi-grid sub-panels for responsive desktop placement.</li>
+ *   <li><b>Custom Summary Cards:</b> Renders 4 rounded accent cards for Income, Expenses, Balance, and Health Score.</li>
+ *   <li><b>Dynamic JTable:</b> Renders zebra rows, soft status colors (Green/Red), and cursor-tracked hover highlighting.</li>
+ *   <li><b>EDT Safety:</b> Offloads file system querying to background `SwingWorker` threads to prevent UI hangs.</li>
+ * </ul>
+ * 
+ * @see javax.swing.JPanel
+ * @see TransactionService
+ * @see BudgetService
+ * @see LoanService
+ */
 @SuppressWarnings({"serial", "this-escape"})
 public class DashboardPanel extends JPanel implements Scrollable {
 
+    // Injected Business Services
     private final TransactionService transactionService;
     private final BudgetService budgetService;
     private final LoanService loanService;
     private final InsightService insightService;
+    
+    // User Context
     private final String username;
     
+    /**
+     * Local memory copy of user transaction ledger.
+     */
     private List<Transaction> allTransactions = new ArrayList<>();
     
-    // Original summary labels mapped to cards
+    // Original summary labels mapped to cards (for backwards compatibility)
     private JLabel incomeLabel;
     private JLabel expenseLabel;
     private JLabel balanceLabel;
@@ -70,6 +104,7 @@ public class DashboardPanel extends JPanel implements Scrollable {
     private JLabel statusLabel;
     private JProgressBar scoreBar;
     
+    // Quick Add controls
     private JTextField amountField;
     private JComboBox<String> typeBox;
     private JComboBox<String> categoryBox;
@@ -78,6 +113,7 @@ public class DashboardPanel extends JPanel implements Scrollable {
     private JTextArea notificationArea;
     private JTextArea insightArea;
     
+    // Layout containers
     private JPanel scorePanel;
     private RoundedCardPanel quickAddPanel;
     private JPanel recentTablePanel;
@@ -89,15 +125,28 @@ public class DashboardPanel extends JPanel implements Scrollable {
     private JLabel categoryLabel;
     private JButton quickAddBtn;
 
-    // Redesign Fields
+    // Redesigned components
     private SummaryCard incomeCard;
     private SummaryCard expenseCard;
     private SummaryCard balanceCard;
     private SummaryCard scoreCard;
     private JScrollPane tableScrollPane;
     private JPanel emptyStatePanel;
+    
+    /**
+     * Stores the row index currently hovered by the user's cursor.
+     */
     private int hoveredRow = -1;
 
+    /**
+     * Constructs the DashboardPanel, binding layouts, building sub-sections,
+     * and launching background loaders.
+     * 
+     * @param username The currently authenticated user.
+     * @param transactionService Injected Transaction Service.
+     * @param budgetService Injected Budget Service.
+     * @param loanService Injected Loan Service.
+     */
     public DashboardPanel(String username, TransactionService transactionService, BudgetService budgetService, LoanService loanService) {
         this.username = username;
         this.transactionService = transactionService;
@@ -125,6 +174,7 @@ public class DashboardPanel extends JPanel implements Scrollable {
         // SOUTH: Natural language insights panel
         add(createInsightsPanel(), BorderLayout.SOUTH);
 
+        // Populate widgets with asynchronous loaders
         refreshDashboard();
         ThemeUtil.applyTheme(this);
         updateCardColors();

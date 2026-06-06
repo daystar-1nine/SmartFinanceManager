@@ -30,58 +30,76 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * TransactionPanel (FINAL CLEAN VERSION)
- * --------------------------------------
- * ✔ Add / Edit / Delete
- * ✔ Undo Delete
- * ✔ Search + Filter
- * ✔ Summary + Financial Score
- * ✔ Export TXT / CSV
+ * <h2>TransactionPanel</h2>
+ * <p>
+ * This class represents the interactive transaction ledger interface of the Smart Finance Manager.
+ * It provides users with controls to create, update, delete, search, and export transaction lists.
+ * </p>
+ * 
+ * <h3>Architecture Role:</h3>
+ * <p>
+ * Fits into the <b>UI (Presentation) Layer</b>. It binds action listeners to input fields
+ * and table records, routing mutation operations directly to {@link TransactionService}
+ * and {@link BudgetService}.
+ * </p>
+ * 
+ * <h3>Key Features & Systems:</h3>
+ * <ul>
+ *   <li><b>Data Ledger Table:</b> Displays lists of transactions with colored text highlights and mouse-event hover listeners.</li>
+ *   <li><b>Input Sanitization:</b> Uses {@link util.CSVUtil} to strip commas from raw user notes before serializing to disk.</li>
+ *   <li><b>Undo Support:</b> Captures deleted transactions to enable transient "Undo Delete" recovery.</li>
+ *   <li><b>Export Engine:</b> Outputs current transaction list to formatted plain text (.txt) or comma-separated CSV spreadsheets.</li>
+ * </ul>
+ * 
+ * @see javax.swing.JPanel
+ * @see TransactionService
+ * @see BudgetService
+ * @see InsightService
  */
 @SuppressWarnings({"serial", "this-escape"})
 public class TransactionPanel extends JPanel implements Scrollable {
 
     // ================= SERVICES =================
-    private InsightService insightService; // ✅ ADD THIS
+    private InsightService insightService;
 
-    // ================= INPUT =================
+    // ================= INPUT COMPONENTS =================
     private JTextField amountField, noteField;
     private JComboBox<String> typeBox, categoryBox;
 
-    // ================= FILTER =================
+    // ================= FILTER COMPONENTS =================
     private JTextField searchField;
     private JComboBox<String> filterCategoryBox;
 
-    // ================= TABLE =================
+    // ================= TABLE COMPONENTS =================
     private JTable table;
     private DefaultTableModel tableModel;
 
-    // ================= DATA =================
+    // ================= DATA LOGISTICS =================
     private List<Transaction> allTransactions = new ArrayList<>();
     private TransactionService transactionService;
     private String username;
     private int transactionId = 1;
 
-    // ================= SUMMARY =================
+    // ================= SUMMARY WIDGETS =================
     private JLabel incomeLabel, expenseLabel, balanceLabel;
 
-    // ================= SCORE =================
+    // ================= HEALTH SCORE COMPONENTS =================
     private JLabel scoreLabel, statusLabel;
     private JProgressBar scoreBar;
 
-    // ================= UNDO =================
+    // ================= UNDO CACHE =================
     private Transaction lastDeletedTransaction;
     private int lastDeletedIndex;
 
-    // ================= NOTIFICATION =================
+    // ================= NOTIFICATION WIDGETS =================
     private JTextArea notificationArea;
     private BudgetService budgetService;
 
-    // ================= InsightService =================
+    // ================= INSIGHTS & GRAPHS =================
     private JTextArea insightArea;
-    private PieChartPanel pieChartPanel; // 🔥 ADD THIS
+    private PieChartPanel pieChartPanel;
 
-    // ================= LANGUAGE REFRESHABLE FIELDS =================
+    // ================= MULTI-LANGUAGE REFRESHABLE WIDGETS =================
     private JLabel amountLabel, typeLabel, categoryLabel, noteLabel;
     private JButton addBtn, editBtn, deleteBtn;
     private JLabel searchLabel, filterCategoryLabel;
@@ -89,17 +107,23 @@ public class TransactionPanel extends JPanel implements Scrollable {
     private JButton exportTxtBtn, exportCsvBtn;
     private JPanel notificationPanel, insightPanel;
 
-    // ================= CONSTRUCTOR =================
+    /**
+     * Constructs the TransactionPanel, binding DI services and building sub-panels.
+     * 
+     * @param username The authenticated user profile username.
+     * @param transactionService Injected Transaction Service.
+     * @param budgetService Injected Budget Service.
+     */
     public TransactionPanel(String username, TransactionService transactionService, BudgetService budgetService) {
 
         this.username = username;
         this.transactionService = transactionService;
         this.budgetService = budgetService;
         this.insightService = new InsightService();
-        this.pieChartPanel = new PieChartPanel(); // 🔥 ADD THIS
+        this.pieChartPanel = new PieChartPanel();
 
         setLayout(new BorderLayout(10, 10));
-        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10)); // Add margins around panel
+        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10)); // Outer margins
 
         add(createSummaryPanel(), BorderLayout.NORTH);
 
@@ -109,19 +133,19 @@ public class TransactionPanel extends JPanel implements Scrollable {
 
         add(center, BorderLayout.CENTER);
 
-        // ✅ ADD NOTIFICATION PANEL (RIGHT SIDE)
-        JPanel rightPanel = new JPanel(new GridLayout(3, 1, 10, 10)); // Changed rows from 2 to 3
-
+        // Right-side auxiliary panels (Notifications, Insights, Category Pie Chart)
+        JPanel rightPanel = new JPanel(new GridLayout(3, 1, 10, 10));
         rightPanel.setPreferredSize(new Dimension(260, 0));
 
-        rightPanel.add(createNotificationPanel()); // Top
-        rightPanel.add(createInsightPanel());// Middle
-        rightPanel.add(pieChartPanel); // Bottom: Custom pie chart drawing
+        rightPanel.add(createNotificationPanel());
+        rightPanel.add(createInsightPanel());
+        rightPanel.add(pieChartPanel);
         add(rightPanel, BorderLayout.EAST);
 
+        // Load transaction data from services
         loadTransactions();
 
-        // Apply active theme colors recursively
+        // Recursively apply theme settings
         ThemeUtil.applyTheme(this);
     }
 

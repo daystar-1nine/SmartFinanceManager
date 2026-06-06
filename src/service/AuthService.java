@@ -17,23 +17,70 @@ import java.util.logging.Logger;
 import java.io.*;
 
 /**
- * AuthService Class
- * -----------------
- * Handles user authentication, registration, credential security, and automatic hashing upgrades.
- * Upgraded to use char[] passwords and native JVM memory cleaning.
+ * <h2>AuthService</h2>
+ * <p>
+ * This class handles all user authentication, profile registration, credential verification,
+ * and seamless security hashing upgrades.
+ * </p>
+ * 
+ * <h3>Architecture Role:</h3>
+ * <p>
+ * Part of the <b>Service Layer</b>. It manages security credentials and acts as the gatekeeper
+ * for user sessions before the main application dashboards are loaded.
+ * </p>
+ * 
+ * <h3>Security Mechanisms & Best Practices:</h3>
+ * <ul>
+ *   <li><b>PBKDF2 Password Hashing:</b> Uses <code>PBKDF2WithHmacSHA256</code> with 10,000 iterations
+ *       and a 256-bit key length to mitigate brute-force and pre-computation attacks.</li>
+ *   <li><b>Cryptographic Salts:</b> Generates unique 16-byte random salts per user, preventing rainbow table attacks.</li>
+ *   <li><b>Memory Leak Prevention:</b> Takes <code>char[]</code> inputs instead of immutable strings. It zero-fills
+ *       the character buffers immediately after hashing to prevent password residue from lingering in JVM heap dumps.</li>
+ *   <li><b>Backward Compatibility:</b> Automatically upgrades legacy plain text or SHA-256 passwords to salted PBKDF2
+ *       hashes during a successful login attempt.</li>
+ * </ul>
+ * 
+ * @see User
+ * @see FileUtil
  */
 public class AuthService {
 
+    /**
+     * Logger instance for consolidating error diagnostics and warning logs.
+     */
     private static final Logger LOGGER = Logger.getLogger(AuthService.class.getName());
+
+    /**
+     * File path where user login credentials and profile strings are persisted.
+     */
     private static final String USER_FILE = Constants.USER_FILE;
+
+    /**
+     * Number of iterations for PBKDF2 hashing. Balancing security and desktop response speed.
+     */
     private static final int ITERATIONS = 10000;
+
+    /**
+     * Target key length in bits for the generated PBKDF2 hash.
+     */
     private static final int KEY_LENGTH = 256;
 
+    /**
+     * Read/Write lock to secure concurrent file accesses and thread-safe cache updates.
+     */
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+
+    /**
+     * In-memory cache mapping lowercase usernames to User profiles to prevent excessive disk hits.
+     */
     private final Map<String, User> userCache = new HashMap<>();
 
     /**
-     * Hashes a password string using SHA-256 cryptosystems (Legacy).
+     * Hashes a password string using SHA-256 cryptosystems (Legacy compatibility helper).
+     * Zero-fills all temporary byte arrays immediately after calculation.
+     * 
+     * @param password Char array representation of the password.
+     * @return Hex-encoded SHA-256 string, or null if input is null.
      */
     public static String hashPassword(char[] password) {
         if (password == null) return null;
@@ -42,7 +89,7 @@ public class AuthService {
             byte[] bytes = charArrayToByteArray(password);
             byte[] hash = digest.digest(bytes);
             
-            // Clear temporary byte buffer immediately
+            // Security: Zero-out temporary byte buffer immediately
             java.util.Arrays.fill(bytes, (byte) 0);
 
             StringBuilder hexString = new StringBuilder();
@@ -60,7 +107,12 @@ public class AuthService {
     }
 
     /**
-     * Hashes a password using PBKDF2WithHmacSHA256.
+     * Hashes a password using PBKDF2WithHmacSHA256 and a hex-encoded salt.
+     * Clears the internal PBEKeySpec password buffers natively.
+     * 
+     * @param password Char array password to be hashed.
+     * @param saltHex Hexadecimal string representing the salt.
+     * @return Hex-encoded PBKDF2 hash string.
      */
     public static String hashPasswordPBKDF2(char[] password, String saltHex) {
         if (password == null || saltHex == null) return null;
@@ -69,7 +121,9 @@ public class AuthService {
             javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(password, salt, ITERATIONS, KEY_LENGTH);
             javax.crypto.SecretKeyFactory skf = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
             byte[] hash = skf.generateSecret(spec).getEncoded();
-            spec.clearPassword(); // Zero out password buffer natively
+            
+            // Security: Zero out the PBEKeySpec buffer natively inside JDK crypto classes
+            spec.clearPassword(); 
             return bytesToHex(hash);
         } catch (Exception e) {
             throw new RuntimeException("Error hashing password with PBKDF2", e);
@@ -77,7 +131,9 @@ public class AuthService {
     }
 
     /**
-     * Generates a cryptographically secure random salt.
+     * Generates a cryptographically secure random 16-byte salt, converted to a hexadecimal string.
+     * 
+     * @return Hexadecimal salt string.
      */
     public static String generateSalt() {
         java.security.SecureRandom sr = new java.security.SecureRandom();
@@ -86,6 +142,9 @@ public class AuthService {
         return bytesToHex(salt);
     }
 
+    /**
+     * Converts a byte array to its hexadecimal string representation.
+     */
     private static String bytesToHex(byte[] bytes) {
         StringBuilder sb = new StringBuilder();
         for (byte b : bytes) {
@@ -94,6 +153,9 @@ public class AuthService {
         return sb.toString();
     }
 
+    /**
+     * Converts a hexadecimal string back to a byte array.
+     */
     private static byte[] hexToBytes(String hex) {
         int len = hex.length();
         byte[] data = new byte[len / 2];
@@ -104,17 +166,25 @@ public class AuthService {
         return data;
     }
 
+    /**
+     * Safely decodes a char array to a UTF-8 byte array and zero-fills intermediate buffers.
+     */
     private static byte[] charArrayToByteArray(char[] chars) {
         java.nio.CharBuffer charBuffer = java.nio.CharBuffer.wrap(chars);
         java.nio.ByteBuffer byteBuffer = StandardCharsets.UTF_8.encode(charBuffer);
         byte[] bytes = java.util.Arrays.copyOfRange(byteBuffer.array(),
                 byteBuffer.position(), byteBuffer.limit());
-        java.util.Arrays.fill(byteBuffer.array(), (byte) 0); // Clear backup array
+        // Security: Zero out the backup array of the byte buffer to avoid credentials leaking
+        java.util.Arrays.fill(byteBuffer.array(), (byte) 0); 
         return bytes;
     }
 
     /**
-     * Registers a new user, hashing the password before writing to file.
+     * Registers a new user with PBKDF2 hashing, verifying username availability.
+     * 
+     * @param username The desired username (case-insensitive checks applied).
+     * @param password Char array password.
+     * @return True if signup succeeded, false if username already exists or inputs invalid.
      */
     public boolean signup(String username, char[] password) {
         if (username == null || username.isEmpty() || password == null || password.length == 0) {
@@ -124,18 +194,19 @@ public class AuthService {
         rwLock.writeLock().lock();
         try {
             if (userExistsInternal(username)) {
-                return false; // Duplicate username not allowed
+                return false; // Duplicate check
             }
 
             // Create User object with PBKDF2 hashed password
             String salt = generateSalt();
             String hash = hashPasswordPBKDF2(password, salt);
+            // Save as salt:hash
             User user = new User(username, salt + ":" + hash, username.toLowerCase() + "@example.com", LocalDate.now().toString());
 
             // Save user to file
             FileUtil.writeToFile(USER_FILE, user.toFileString(), true);
 
-            // Populate cache
+            // Update local memory cache
             userCache.put(username.toLowerCase(), user);
             return true;
         } finally {
@@ -144,8 +215,12 @@ public class AuthService {
     }
 
     /**
-     * Logs in a user by checking credentials.
-     * Backwards-compatible: Automatically upgrades legacy passwords to PBKDF2 hashes.
+     * Authenticates user credentials. Supports automatic, seamless hashing upgrades of legacy passwords
+     * (e.g. Plaintext or plain SHA-256 hashes) to PBKDF2.
+     * 
+     * @param username Case-insensitive username.
+     * @param password Char array password to verify.
+     * @return True if credentials match, false otherwise.
      */
     public boolean login(String username, char[] password) {
         if (username == null || password == null || password.length == 0) {
@@ -165,8 +240,9 @@ public class AuthService {
                 if (user != null && user.getUsername().equalsIgnoreCase(username)) {
                     targetUser = user;
                     String storedPass = user.getPassword();
+                    
                     if (storedPass.contains(":")) {
-                        // PBKDF2 Verification
+                        // PBKDF2 Verification: format is salt:hash
                         String[] parts = storedPass.split(":");
                         if (parts.length == 2) {
                             String salt = parts[0];
@@ -178,11 +254,11 @@ public class AuthService {
                             }
                         }
                     } else {
-                        // Legacy Verification (SHA-256 or plaintext)
+                        // Legacy password verification: hashes using original MD5/SHA-256 routines
                         String legacyHashed = hashPassword(password);
                         if (storedPass.equals(legacyHashed) || storedPass.equals(new String(password))) {
                             authenticated = true;
-                            needUpgrade = true;
+                            needUpgrade = true; // Flag for seamless security upgrading
                             break;
                         }
                     }
@@ -205,7 +281,7 @@ public class AuthService {
                     }
                 }
                 
-                // Write out file atomically
+                // Write out file atomically to avoid profile data corruption during runtime failures
                 File targetFile = new File(USER_FILE);
                 File tempFile = new File(targetFile.getAbsolutePath() + ".tmp");
                 try {
@@ -226,6 +302,7 @@ public class AuthService {
                 }
             }
 
+            // Cache successfully authenticated profiles
             if (authenticated && targetUser != null) {
                 userCache.put(username.toLowerCase(), targetUser);
             }
@@ -237,11 +314,15 @@ public class AuthService {
     }
 
     /**
-     * Retrieves a User object by username (cached lookup supported)
+     * Retrieves a User object by username. Employs double-checked caching patterns to reduce disk I/O.
+     * 
+     * @param username User name to look up.
+     * @return User object, or null if not found.
      */
     public User getUser(String username) {
         if (username == null) return null;
 
+        // Try reading from cache first under read lock
         rwLock.readLock().lock();
         try {
             if (userCache.containsKey(username.toLowerCase())) {
@@ -251,8 +332,10 @@ public class AuthService {
             rwLock.readLock().unlock();
         }
 
+        // Cache Miss: fetch from disk under write lock
         rwLock.writeLock().lock();
         try {
+            // Double check cache
             if (userCache.containsKey(username.toLowerCase())) {
                 return userCache.get(username.toLowerCase());
             }
@@ -272,7 +355,12 @@ public class AuthService {
     }
 
     /**
-     * Updates credentials and invalidates caches.
+     * Updates user credentials (password, email) and commits changes atomically.
+     * 
+     * @param username The target user.
+     * @param newPassword New password array.
+     * @param newEmail New email address.
+     * @return True if update succeeded, false otherwise.
      */
     public boolean updateUserCredentials(String username, char[] newPassword, String newEmail) {
         if (username == null || newPassword == null || newPassword.length == 0 || newEmail == null || newEmail.isEmpty()) {
@@ -332,6 +420,9 @@ public class AuthService {
         }
     }
 
+    /**
+     * Helper to verify if a username already exists in the file database (internal usage).
+     */
     private boolean userExistsInternal(String username) {
         if (userCache.containsKey(username.toLowerCase())) {
             return true;
@@ -347,6 +438,11 @@ public class AuthService {
         return false;
     }
 
+    /**
+     * Evicts user records from cache.
+     * 
+     * @param username Lowercase username.
+     */
     public void clearCache(String username) {
         rwLock.writeLock().lock();
         try {
