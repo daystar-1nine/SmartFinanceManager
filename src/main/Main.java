@@ -15,7 +15,7 @@ public class Main {
 
     public static void main(String[] args) {
 
-        /**
+        /*
          * Ensures that all Swing components are created
          * and updated on the Event Dispatch Thread (EDT).
          * This is a best practice for Swing applications.

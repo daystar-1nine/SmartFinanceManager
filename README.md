@@ -143,6 +143,29 @@ If you want to package the source code into the self-contained `SmartFinanceMana
 
 ---
 
+### Option D: Build & Run Native Desktop Application (.exe)
+
+You can package the application into a standalone, self-contained native Windows application folder containing `SmartFinanceManager.exe` with its own bundled private Java Runtime Environment (JRE). The user does not need to have Java pre-installed on their machine.
+
+1.  Compile and build `SmartFinanceManager.jar` (following **Option C**).
+2.  Run the packaging command via the JDK `jpackage` tool:
+    ```bash
+    # Create clean input directory
+    mkdir dist
+    copy SmartFinanceManager.jar dist\
+    
+    # Package into a native app image
+    jpackage --name "SmartFinanceManager" ^
+             --input dist ^
+             --main-jar SmartFinanceManager.jar ^
+             --main-class main.Main ^
+             --type app-image ^
+             --dest build_dist
+    ```
+3.  The self-contained native directory will be generated at `build_dist/SmartFinanceManager/`. You can launch the application by running or double-clicking `SmartFinanceManager.exe` inside that folder.
+
+---
+
 ## 📖 Usage Guide
 
 *   **Signup & Login:** Launch the app, navigate to the Signup Frame to register a new user, and log in.
