@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import util.SecurityUtil;
 
 /**
  * FileBudgetDAO Class
@@ -42,17 +43,22 @@ public class FileBudgetDAO implements BudgetDAO {
                 return budgets;
             }
 
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.trim().isEmpty()) continue;
-                    String[] parts = line.split(",");
-                    if (parts.length == 2) {
-                        try {
-                            String category = parts[0].trim();
-                            double limit = Double.parseDouble(parts[1].trim());
-                            budgets.put(category, limit);
-                        } catch (NumberFormatException ignored) {}
+            try {
+                byte[] fileBytes = Files.readAllBytes(file.toPath());
+                byte[] decryptedBytes = SecurityUtil.decryptSafe(fileBytes);
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                        new ByteArrayInputStream(decryptedBytes), java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.trim().isEmpty()) continue;
+                        String[] parts = line.split(",");
+                        if (parts.length == 2) {
+                            try {
+                                String category = parts[0].trim();
+                                double limit = Double.parseDouble(parts[1].trim());
+                                budgets.put(category, limit);
+                            } catch (NumberFormatException ignored) {}
+                        }
                     }
                 }
             } catch (IOException e) {
@@ -73,16 +79,22 @@ public class FileBudgetDAO implements BudgetDAO {
             File file = getUserFile(username);
             File tempFile = new File(file.getAbsolutePath() + ".tmp");
             try {
-                try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(baos, java.nio.charset.StandardCharsets.UTF_8))) {
                     for (Map.Entry<String, Double> entry : budgets.entrySet()) {
                         writer.write(entry.getKey() + "," + entry.getValue());
                         writer.newLine();
                     }
                 }
+
+                byte[] plainBytes = baos.toByteArray();
+                byte[] encryptedBytes = SecurityUtil.encrypt(plainBytes);
+                Files.write(tempFile.toPath(), encryptedBytes);
+
                 Files.move(tempFile.toPath(), file.toPath(),
                         StandardCopyOption.REPLACE_EXISTING,
                         StandardCopyOption.ATOMIC_MOVE);
-            } catch (IOException e) {
+            } catch (Exception e) {
                 LOGGER.log(Level.SEVERE, "Error saving budgets for user: " + username, e);
                 if (tempFile.exists()) {
                     tempFile.delete();

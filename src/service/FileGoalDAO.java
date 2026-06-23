@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import util.SecurityUtil;
 
 /**
  * FileGoalDAO Class
@@ -43,12 +44,17 @@ public class FileGoalDAO implements GoalDAO {
                 return goals;
             }
 
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    Goal goal = Goal.fromFileString(line);
-                    if (goal != null) {
-                        goals.add(goal);
+            try {
+                byte[] fileBytes = Files.readAllBytes(file.toPath());
+                byte[] decryptedBytes = SecurityUtil.decryptSafe(fileBytes);
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                        new ByteArrayInputStream(decryptedBytes), java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        Goal goal = Goal.fromFileString(line);
+                        if (goal != null) {
+                            goals.add(goal);
+                        }
                     }
                 }
             } catch (IOException e) {
@@ -69,7 +75,8 @@ public class FileGoalDAO implements GoalDAO {
             File file = getUserFile(username);
             File tempFile = new File(file.getAbsolutePath() + ".tmp");
             try {
-                try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(baos, java.nio.charset.StandardCharsets.UTF_8))) {
                     for (Goal goal : goals) {
                         if (goal != null) {
                             writer.write(goal.toFileString());
@@ -77,10 +84,15 @@ public class FileGoalDAO implements GoalDAO {
                         }
                     }
                 }
+
+                byte[] plainBytes = baos.toByteArray();
+                byte[] encryptedBytes = SecurityUtil.encrypt(plainBytes);
+                Files.write(tempFile.toPath(), encryptedBytes);
+
                 Files.move(tempFile.toPath(), file.toPath(),
                         StandardCopyOption.REPLACE_EXISTING,
                         StandardCopyOption.ATOMIC_MOVE);
-            } catch (IOException e) {
+            } catch (Exception e) {
                 LOGGER.log(Level.SEVERE, "Error saving goals for user: " + username, e);
                 if (tempFile.exists()) {
                     tempFile.delete();

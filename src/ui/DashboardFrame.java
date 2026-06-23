@@ -3,6 +3,7 @@ package ui;
 import javax.swing.*;
 import java.awt.*;
 import util.IconUtil;
+import util.SecurityUtil;
 import service.*;
 
 /**
@@ -102,6 +103,11 @@ public class DashboardFrame extends JFrame {
 
         // Menu Button Action Listeners
         Runnable logoutCallback = () -> {
+            // Wipe symmetric key from memory and clear active service caches
+            SecurityUtil.clearSessionKey();
+            if (authService != null) authService.clearCache(username);
+            if (transactionService != null) transactionService.clearCache(username);
+
             this.dispose();
             new LoginFrame(authService, transactionService, loanService, budgetDAO, goalDAO);
         };

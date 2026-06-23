@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import util.SecurityUtil;
 
 /**
  * <h2>TransactionService</h2>
@@ -102,18 +103,9 @@ public class TransactionService implements TransactionDAO {
         // Acquire write lock to prevent concurrent modifications/dirty reads of the data file
         rwLock.writeLock().lock();
         try {
-            File file = getUserFile(username);
-            // Append mode is set to true to append the serialized CSV line safely
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, true))) {
-                writer.write(transaction.toFileString());
-                writer.newLine();
-            } catch (IOException e) {
-                LOGGER.log(Level.SEVERE, "Error appending transaction for user: " + username, e);
-            }
-            // Seamlessly update in-memory cache if active to maintain synchronicity
-            if (transactionCache.containsKey(username)) {
-                transactionCache.get(username).add(transaction);
-            }
+            List<Transaction> list = loadTransactions(username);
+            list.add(transaction);
+            saveAllTransactions(username, list);
         } finally {
             rwLock.writeLock().unlock();
         }
@@ -156,13 +148,18 @@ public class TransactionService implements TransactionDAO {
                 return transactions;
             }
 
-            // Parse CSV lines into Transaction objects
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    Transaction transaction = Transaction.fromFileString(line);
-                    if (transaction != null) {
-                        transactions.add(transaction);
+            // Parse CSV lines from decrypted bytes
+            try {
+                byte[] fileBytes = Files.readAllBytes(file.toPath());
+                byte[] decryptedBytes = SecurityUtil.decryptSafe(fileBytes);
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                        new ByteArrayInputStream(decryptedBytes), java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        Transaction transaction = Transaction.fromFileString(line);
+                        if (transaction != null) {
+                            transactions.add(transaction);
+                        }
                     }
                 }
             } catch (IOException e) {
@@ -192,8 +189,9 @@ public class TransactionService implements TransactionDAO {
             // Construct temp file name alongside primary database file
             File tempFile = new File(file.getAbsolutePath() + ".tmp");
             try {
-                // Write list contents into temporary buffering file
-                try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+                // Write list contents into a byte stream in memory
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(baos, java.nio.charset.StandardCharsets.UTF_8))) {
                     for (Transaction transaction : transactions) {
                         if (transaction != null) {
                             writer.write(transaction.toFileString());
@@ -201,11 +199,17 @@ public class TransactionService implements TransactionDAO {
                         }
                     }
                 }
+
+                // Encrypt bytes and write to temp file
+                byte[] plainBytes = baos.toByteArray();
+                byte[] encryptedBytes = SecurityUtil.encrypt(plainBytes);
+                Files.write(tempFile.toPath(), encryptedBytes);
+
                 // Perform atomic OS-level file move. Prevents incomplete writes from ruining data.
                 Files.move(tempFile.toPath(), file.toPath(),
                         StandardCopyOption.REPLACE_EXISTING,
                         StandardCopyOption.ATOMIC_MOVE);
-            } catch (IOException e) {
+            } catch (Exception e) {
                 LOGGER.log(Level.SEVERE, "Error saving transactions atomically for user: " + username, e);
                 // Clean up dangling temp files in case of operational failure
                 if (tempFile.exists()) {

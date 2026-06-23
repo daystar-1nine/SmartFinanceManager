@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import util.SecurityUtil;
 
 /**
  * FileLoanDAO Class
@@ -40,13 +41,9 @@ public class FileLoanDAO implements LoanDAO {
 
         rwLock.writeLock().lock();
         try {
-            File file = getUserFile(username);
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, true))) {
-                writer.write(loan.toFileString());
-                writer.newLine();
-            } catch (IOException e) {
-                LOGGER.log(Level.SEVERE, "Error appending loan for user: " + username, e);
-            }
+            List<Loan> loans = loadLoans(username);
+            loans.add(loan);
+            saveAllLoans(username, loans);
         } finally {
             rwLock.writeLock().unlock();
         }
@@ -62,12 +59,17 @@ public class FileLoanDAO implements LoanDAO {
                 return loans;
             }
 
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    Loan loan = Loan.fromFileString(line);
-                    if (loan != null) {
-                        loans.add(loan);
+            try {
+                byte[] fileBytes = Files.readAllBytes(file.toPath());
+                byte[] decryptedBytes = SecurityUtil.decryptSafe(fileBytes);
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                        new ByteArrayInputStream(decryptedBytes), java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        Loan loan = Loan.fromFileString(line);
+                        if (loan != null) {
+                            loans.add(loan);
+                        }
                     }
                 }
             } catch (IOException e) {
@@ -86,7 +88,8 @@ public class FileLoanDAO implements LoanDAO {
             File file = getUserFile(username);
             File tempFile = new File(file.getAbsolutePath() + ".tmp");
             try {
-                try (BufferedWriter writer = new BufferedWriter(new FileWriter(tempFile))) {
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(baos, java.nio.charset.StandardCharsets.UTF_8))) {
                     for (Loan loan : loans) {
                         if (loan != null) {
                             writer.write(loan.toFileString());
@@ -94,10 +97,15 @@ public class FileLoanDAO implements LoanDAO {
                         }
                     }
                 }
+
+                byte[] plainBytes = baos.toByteArray();
+                byte[] encryptedBytes = SecurityUtil.encrypt(plainBytes);
+                Files.write(tempFile.toPath(), encryptedBytes);
+
                 Files.move(tempFile.toPath(), file.toPath(),
                         StandardCopyOption.REPLACE_EXISTING,
                         StandardCopyOption.ATOMIC_MOVE);
-            } catch (IOException e) {
+            } catch (Exception e) {
                 LOGGER.log(Level.SEVERE, "Error saving all loans atomically for user: " + username, e);
                 if (tempFile.exists()) {
                     tempFile.delete();

@@ -3,6 +3,7 @@ package service;
 import model.User;
 import util.FileUtil;
 import util.Constants;
+import util.SecurityUtil;
 
 import java.time.LocalDate;
 import java.security.MessageDigest;
@@ -250,6 +251,10 @@ public class AuthService {
                             String inputHash = hashPasswordPBKDF2(password, salt);
                             if (inputHash.equals(hash)) {
                                 authenticated = true;
+                                // Store derived session key
+                                byte[] aesKey = hexToBytes(inputHash);
+                                SecurityUtil.setSessionKey(aesKey);
+                                java.util.Arrays.fill(aesKey, (byte) 0);
                                 break;
                             }
                         }
@@ -276,6 +281,11 @@ public class AuthService {
                             String newHash = hashPasswordPBKDF2(password, newSalt);
                             user.setPassword(newSalt + ":" + newHash);
                             targetUser = user;
+
+                            // Store the upgraded derived session key
+                            byte[] aesKey = hexToBytes(newHash);
+                            SecurityUtil.setSessionKey(aesKey);
+                            java.util.Arrays.fill(aesKey, (byte) 0);
                         }
                         usersList.add(user);
                     }
@@ -362,6 +372,45 @@ public class AuthService {
      * @param newEmail New email address.
      * @return True if update succeeded, false otherwise.
      */
+    private byte[] readFileBytes(String path) {
+        File file = new File(path);
+        if (!file.exists()) return null;
+        try {
+            return java.nio.file.Files.readAllBytes(file.toPath());
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Error reading raw bytes from " + path, e);
+            return null;
+        }
+    }
+
+    private boolean writeFileBytes(String path, byte[] bytes) {
+        if (bytes == null) return false;
+        File file = new File(path);
+        File tempFile = new File(file.getAbsolutePath() + ".tmp");
+        try {
+            java.nio.file.Files.write(tempFile.toPath(), bytes);
+            java.nio.file.Files.move(tempFile.toPath(), file.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            return true;
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "Error writing raw bytes to " + path, e);
+            if (tempFile.exists()) {
+                tempFile.delete();
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Updates user credentials (password, email) and commits changes atomically.
+     * Also performs re-encryption of all user data files with the new derived key.
+     * 
+     * @param username The target user.
+     * @param newPassword New password array.
+     * @param newEmail New email address.
+     * @return True if update succeeded, false otherwise.
+     */
     public boolean updateUserCredentials(String username, char[] newPassword, String newEmail) {
         if (username == null || newPassword == null || newPassword.length == 0 || newEmail == null || newEmail.isEmpty()) {
             return false;
@@ -369,6 +418,59 @@ public class AuthService {
 
         rwLock.writeLock().lock();
         try {
+            // 1. Read existing user files and decrypt them using old session key
+            String txPath = Constants.TRANSACTION_DIR + username + "_transactions.txt";
+            String loanPath = Constants.LOAN_DIR + username + "_loans.txt";
+            String budgetPath = Constants.BUDGET_DIR + username + "_budgets.txt";
+            String goalPath = Constants.GOAL_DIR + username + "_goals.txt";
+
+            byte[] txBytes = readFileBytes(txPath);
+            byte[] loanBytes = readFileBytes(loanPath);
+            byte[] budgetBytes = readFileBytes(budgetPath);
+            byte[] goalBytes = readFileBytes(goalPath);
+
+            byte[] plainTx = txBytes != null ? SecurityUtil.decryptSafe(txBytes) : null;
+            byte[] plainLoan = loanBytes != null ? SecurityUtil.decryptSafe(loanBytes) : null;
+            byte[] plainBudget = budgetBytes != null ? SecurityUtil.decryptSafe(budgetBytes) : null;
+            byte[] plainGoal = goalBytes != null ? SecurityUtil.decryptSafe(goalBytes) : null;
+
+            // 2. Generate new PBKDF2 credentials and AES key
+            String salt = generateSalt();
+            String hash = hashPasswordPBKDF2(newPassword, salt);
+            byte[] newAesKey = hexToBytes(hash);
+            byte[] oldAesKey = SecurityUtil.getSessionKey();
+
+            // 3. Encrypt files with the new key and write to disk
+            boolean reencrypted = false;
+            try {
+                SecurityUtil.setSessionKey(newAesKey);
+
+                byte[] encTx = plainTx != null ? SecurityUtil.encrypt(plainTx) : null;
+                byte[] encLoan = plainLoan != null ? SecurityUtil.encrypt(plainLoan) : null;
+                byte[] encBudget = plainBudget != null ? SecurityUtil.encrypt(plainBudget) : null;
+                byte[] encGoal = plainGoal != null ? SecurityUtil.encrypt(plainGoal) : null;
+
+                if (encTx != null) writeFileBytes(txPath, encTx);
+                if (encLoan != null) writeFileBytes(loanPath, encLoan);
+                if (encBudget != null) writeFileBytes(budgetPath, encBudget);
+                if (encGoal != null) writeFileBytes(goalPath, encGoal);
+
+                reencrypted = true;
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Failed to re-encrypt user files during password change", e);
+                // Revert to old key
+                SecurityUtil.setSessionKey(oldAesKey);
+                if (newAesKey != null) java.util.Arrays.fill(newAesKey, (byte) 0);
+                return false;
+            } finally {
+                if (newAesKey != null) java.util.Arrays.fill(newAesKey, (byte) 0);
+            }
+
+            if (!reencrypted) {
+                return false;
+            }
+
+            // 4. Update the user database file
             List<String> lines = FileUtil.readFromFile(USER_FILE);
             List<User> users = new ArrayList<>();
             boolean updated = false;
@@ -378,8 +480,6 @@ public class AuthService {
                 User user = User.fromFileString(line);
                 if (user != null) {
                     if (user.getUsername().equalsIgnoreCase(username)) {
-                        String salt = generateSalt();
-                        String hash = hashPasswordPBKDF2(newPassword, salt);
                         user.setPassword(salt + ":" + hash);
                         user.setEmail(newEmail);
                         updated = true;
